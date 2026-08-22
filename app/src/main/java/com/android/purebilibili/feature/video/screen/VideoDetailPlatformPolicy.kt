@@ -658,6 +658,11 @@ internal fun resolvePhoneAutoRotateRequestedOrientation(
         orientationDegrees = normalized,
         portraitSnapDegrees = portraitSnapDegrees
     )
+    val upsideDownPortraitStable = withinWrappedRange(
+        normalized,
+        180 - portraitSnapDegrees,
+        180 + portraitSnapDegrees
+    )
     val exactLandscapeEntry = resolveExactLandscapeOrientation(
         orientationDegrees = normalized,
         minLeftSideTopDegrees = landscapeEnterMinDegrees,
@@ -675,6 +680,7 @@ internal fun resolvePhoneAutoRotateRequestedOrientation(
 
     return when {
         isCurrentlyLandscape && exactLandscapeKeep != null -> exactLandscapeKeep
+        isCurrentlyLandscape && upsideDownPortraitStable -> null
         portraitStable -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         !isCurrentlyLandscape && exactLandscapeEntry != null -> exactLandscapeEntry
         else -> null

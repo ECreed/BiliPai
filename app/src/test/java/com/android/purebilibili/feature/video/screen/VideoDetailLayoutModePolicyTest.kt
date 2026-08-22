@@ -621,6 +621,24 @@ class VideoDetailLayoutModePolicyTest {
     }
 
     @Test
+    fun autoRotateSensorPolicy_keepsLandscapeWhenPhoneIsUpsideDown() {
+        assertEquals(
+            null,
+            resolvePhoneAutoRotateRequestedOrientation(
+                orientationDegrees = 180,
+                isCurrentlyLandscape = true
+            )
+        )
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            resolvePhoneAutoRotateRequestedOrientation(
+                orientationDegrees = 0,
+                isCurrentlyLandscape = true
+            )
+        )
+    }
+
+    @Test
     fun autoRotateSensorPolicy_usesExactLandscapeSideForRightTilt() {
         assertEquals(
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
