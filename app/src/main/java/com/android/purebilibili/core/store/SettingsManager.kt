@@ -1250,6 +1250,7 @@ internal fun encodeCollectionSortPreferences(
 }
 
 object SettingsManager {
+    const val DEFAULT_AUTO_CACHE_CLEAR_THRESHOLD_GB = 5
     enum class AutoCacheClearInterval(val days: Int, val label: String) {
         NEVER(0, "从不"),
         WEEKLY(7, "每周"),
@@ -1284,6 +1285,8 @@ object SettingsManager {
     private val KEY_BG_PLAY = booleanPreferencesKey("bg_play")
     //  [新增] 触感反馈 (默认开启)
     private val KEY_HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("haptic_feedback_enabled")
+    private val KEY_GLOBAL_TEXT_TAP_COPY_ENABLED =
+        booleanPreferencesKey("global_text_tap_copy_enabled")
     //  [新增] 手势灵敏度和主题色
     private val KEY_GESTURE_SENSITIVITY = floatPreferencesKey("gesture_sensitivity")
     private val KEY_SLIDE_VOLUME_BRIGHTNESS_ENABLED = booleanPreferencesKey("slide_volume_brightness_enabled")
@@ -1506,6 +1509,7 @@ object SettingsManager {
     private val KEY_COMMENT_FRAUD_DETECTION_ENABLED =
         booleanPreferencesKey("comment_fraud_detection_enabled")
     private val KEY_AUTO_CACHE_CLEAR_INTERVAL = intPreferencesKey("auto_cache_clear_interval_days")
+    private val KEY_AUTO_CACHE_CLEAR_THRESHOLD_GB = intPreferencesKey("auto_cache_clear_threshold_gb")
     private val KEY_LAST_AUTO_CACHE_CLEAR_AT = longPreferencesKey("last_auto_cache_clear_at")
     private val KEY_COMMENT_MEMBER_DECORATIONS_ENABLED =
         booleanPreferencesKey("comment_member_decorations_enabled")
@@ -2458,6 +2462,15 @@ object SettingsManager {
         // 优先读取缓存
         return context.getSharedPreferences("haptic_cache", Context.MODE_PRIVATE)
             .getBoolean("enabled", true)
+    }
+
+    fun getGlobalTextTapCopyEnabled(context: Context): Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_GLOBAL_TEXT_TAP_COPY_ENABLED] ?: false }
+
+    suspend fun setGlobalTextTapCopyEnabled(context: Context, value: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_GLOBAL_TEXT_TAP_COPY_ENABLED] = value
+        }
     }
 
     //  [新增] --- 手势灵敏度 (0.5 ~ 2.0, 默认 1.0) ---
@@ -5443,6 +5456,18 @@ object SettingsManager {
         }
     }
 
+    fun getAutoCacheClearThresholdGb(context: Context): Flow<Int> =
+        context.settingsDataStore.data.map { preferences ->
+            (preferences[KEY_AUTO_CACHE_CLEAR_THRESHOLD_GB]
+                ?: DEFAULT_AUTO_CACHE_CLEAR_THRESHOLD_GB).coerceIn(1, 20)
+        }
+
+    suspend fun setAutoCacheClearThresholdGb(context: Context, thresholdGb: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_AUTO_CACHE_CLEAR_THRESHOLD_GB] = thresholdGb.coerceIn(1, 20)
+        }
+    }
+
     suspend fun getLastAutoCacheClearAt(context: Context): Long =
         context.settingsDataStore.data.first()[KEY_LAST_AUTO_CACHE_CLEAR_AT] ?: 0L
 
@@ -7122,6 +7147,10 @@ object SettingsManager {
             IntShareablePreferenceDefinition(KEY_COMMENT_COLLAPSED_REPLY_PREVIEW_LIMIT, SettingsShareSection.PLAYBACK),
 
             BooleanShareablePreferenceDefinition(KEY_HAPTIC_FEEDBACK_ENABLED, SettingsShareSection.GESTURE),
+            BooleanShareablePreferenceDefinition(
+                KEY_GLOBAL_TEXT_TAP_COPY_ENABLED,
+                SettingsShareSection.GESTURE,
+            ),
             FloatShareablePreferenceDefinition(KEY_GESTURE_SENSITIVITY, SettingsShareSection.GESTURE),
             BooleanShareablePreferenceDefinition(KEY_SLIDE_VOLUME_BRIGHTNESS_ENABLED, SettingsShareSection.GESTURE),
             BooleanShareablePreferenceDefinition(KEY_SET_SYSTEM_BRIGHTNESS, SettingsShareSection.GESTURE),

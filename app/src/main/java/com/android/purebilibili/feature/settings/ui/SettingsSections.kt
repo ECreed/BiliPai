@@ -216,6 +216,7 @@ internal data class SettingsRootCategoryActions(
     val onImageSavePathClick: () -> Unit,
     val onClearCacheClick: () -> Unit,
     val onAutoCacheClearIntervalChange: (SettingsManager.AutoCacheClearInterval) -> Unit,
+    val onAutoCacheClearThresholdChange: (Int) -> Unit,
     val onGithubClick: () -> Unit,
     val onTelegramClick: () -> Unit,
     val onTelegramGroupClick: () -> Unit = {},
@@ -261,6 +262,7 @@ internal data class SettingsRootCategoryState(
     val customImageSavePath: String?,
     val cacheSize: String,
     val autoCacheClearInterval: SettingsManager.AutoCacheClearInterval,
+    val autoCacheClearThresholdGb: Int,
     val versionName: String,
     val appIcon: String,
     val easterEggEnabled: Boolean,
@@ -326,7 +328,7 @@ internal fun SettingsRootCategoryNavigationSection(
                             imageVector = visual.icon,
                             contentDescription = null,
                             tint = iconContentColor,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(visual.iconSizeDp.dp)
                         )
                         visual.iconResId != null -> AppIcon(
                             painter = painterResource(id = visual.iconResId),
@@ -396,6 +398,7 @@ internal fun SettingsRootCategoryListSection(
                 icon = visual.icon,
                 iconPainter = visual.iconResId?.let { painterResource(id = it) },
                 iconTint = siblingTints[index],
+                iconSizeDp = visual.iconSizeDp,
                 onClick = { onCategoryClick(category) },
             )
             if (index != categories.lastIndex) {
@@ -412,6 +415,7 @@ private fun SettingsRootCategoryRow(
     icon: ImageVector?,
     iconPainter: androidx.compose.ui.graphics.painter.Painter?,
     iconTint: Color,
+    iconSizeDp: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -440,13 +444,13 @@ private fun SettingsRootCategoryRow(
                     painter = iconPainter,
                     contentDescription = null,
                     tint = iconContentColor,
-                    modifier = Modifier.size(visualSpec.categoryIconSize),
+                    modifier = Modifier.size(iconSizeDp.dp),
                 )
                 icon != null -> AppIcon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = iconContentColor,
-                    modifier = Modifier.size(visualSpec.categoryIconSize),
+                    modifier = Modifier.size(iconSizeDp.dp),
                 )
             }
         }
@@ -809,7 +813,9 @@ internal fun SettingsRootCategoryContent(
                             onImageSavePathClick = actions.onImageSavePathClick,
                             onClearCacheClick = actions.onClearCacheClick,
                             autoCacheClearInterval = state.autoCacheClearInterval,
+                            autoCacheClearThresholdGb = state.autoCacheClearThresholdGb,
                             onAutoCacheClearIntervalChange = actions.onAutoCacheClearIntervalChange,
+                            onAutoCacheClearThresholdChange = actions.onAutoCacheClearThresholdChange,
                         )
                     }
                 }
@@ -997,7 +1003,9 @@ internal fun SettingsRootCategoryContent(
                             onImageSavePathClick = actions.onImageSavePathClick,
                             onClearCacheClick = actions.onClearCacheClick,
                             autoCacheClearInterval = state.autoCacheClearInterval,
+                            autoCacheClearThresholdGb = state.autoCacheClearThresholdGb,
                             onAutoCacheClearIntervalChange = actions.onAutoCacheClearIntervalChange,
+                            onAutoCacheClearThresholdChange = actions.onAutoCacheClearThresholdChange,
                         )
                     }
                 }
@@ -1537,19 +1545,21 @@ fun DataStorageSection(
     customImageSavePath: String?,
     cacheSize: String,
     autoCacheClearInterval: SettingsManager.AutoCacheClearInterval,
+    autoCacheClearThresholdGb: Int,
     onSettingsShareClick: () -> Unit,
     onWebDavBackupClick: () -> Unit,
     onDownloadPathClick: () -> Unit,
     onImageSavePathClick: () -> Unit,
     onClearCacheClick: () -> Unit,
-    onAutoCacheClearIntervalChange: (SettingsManager.AutoCacheClearInterval) -> Unit
+    onAutoCacheClearIntervalChange: (SettingsManager.AutoCacheClearInterval) -> Unit,
+    onAutoCacheClearThresholdChange: (Int) -> Unit
 ) {
     val settingsShareVisual = rememberSettingsEntryVisual(SettingsSearchTarget.SETTINGS_SHARE)
     val webDavVisual = rememberSettingsEntryVisual(SettingsSearchTarget.WEBDAV_BACKUP)
     val downloadPathVisual = rememberSettingsEntryVisual(SettingsSearchTarget.DOWNLOAD_PATH)
     val imageSavePathVisual = rememberSettingsEntryVisual(SettingsSearchTarget.IMAGE_SAVE_PATH)
     val clearCacheVisual = rememberSettingsEntryVisual(SettingsSearchTarget.CLEAR_CACHE)
-    val siblingTints = remember { resolveSettingsSiblingIconTints(6, paletteOffset = 2) }
+    val siblingTints = remember { resolveSettingsSiblingIconTints(7, paletteOffset = 2) }
     val showExplicitActionChevron =
         rememberAdaptiveListVisualCapabilities().showExplicitActionChevron
 
@@ -1616,6 +1626,18 @@ fun DataStorageSection(
             icon = clearCacheVisual.icon,
             iconTint = siblingTints[5],
             onSelectionChange = onAutoCacheClearIntervalChange
+        )
+        SettingsAdaptiveDivider()
+        SettingSliderItem(
+            icon = clearCacheVisual.icon,
+            title = "缓存容量上限",
+            subtitle = "应用启动时达到上限即自动清理；默认 5 GB",
+            value = autoCacheClearThresholdGb.toFloat(),
+            onValueChange = { value -> onAutoCacheClearThresholdChange(value.roundToInt()) },
+            valueRange = 1f..20f,
+            steps = 18,
+            valueFormatter = { value -> "${value.roundToInt()} GB" },
+            iconTint = siblingTints[6]
         )
     }
 }
