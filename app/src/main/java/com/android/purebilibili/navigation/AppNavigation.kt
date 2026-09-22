@@ -335,6 +335,7 @@ fun AppNavigation(
     onInitialSearchKeywordConsumed: (String) -> Unit = {},
     onVideoDetailEnter: () -> Unit = {},
     onVideoDetailExit: () -> Unit = {},
+    onPlaybackOrientationOwnerChanged: (Boolean) -> Unit = {},
     onAudioModeEnter: () -> Unit = {},
     onAudioModeExit: () -> Unit = {},
     onPrivacyAuthenticationRequired: (
@@ -509,6 +510,11 @@ fun AppNavigation(
         var accountSessionRefreshGeneration by remember { mutableIntStateOf(0) }
         val currentNavigation3Key = navigation3BackStack.lastOrNull()
         val currentRoute = currentNavigation3Key?.toLegacyRoute()
+        // The foreground destination owns rotation, not retained/back-preview video entries.
+        DisposableEffect(currentNavigation3Key) {
+            onPlaybackOrientationOwnerChanged(playerDestinationOwnsOrientation(currentNavigation3Key))
+            onDispose { }
+        }
         val configuredHomeWallpaperUri by SettingsManager.getHomeWallpaperUri(context).collectAsStateWithLifecycle(initialValue = ""
         )
         val splashWallpaperUri by SettingsManager.getSplashWallpaperUri(context).collectAsStateWithLifecycle(initialValue = ""

@@ -6,6 +6,23 @@ import android.os.Build
 
 internal const val LARGE_SCREEN_SMALLEST_WIDTH_DP = 600
 
+internal fun resolveAppRequestedOrientation(
+    requestedOrientation: Int,
+    playerOwnsOrientation: Boolean,
+    smallestScreenWidthDp: Int,
+    isInMultiWindowMode: Boolean,
+    isInPictureInPictureMode: Boolean,
+): Int {
+    if (playerOwnsOrientation || isInMultiWindowMode || isInPictureInPictureMode) {
+        return requestedOrientation
+    }
+    return if (smallestScreenWidthDp < LARGE_SCREEN_SMALLEST_WIDTH_DP) {
+        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    } else {
+        ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+}
+
 internal fun shouldRequestPhysicalPlayerOrientation(
     smallestScreenWidthDp: Int,
     platformIgnoresLargeScreenOrientationRequests: Boolean =

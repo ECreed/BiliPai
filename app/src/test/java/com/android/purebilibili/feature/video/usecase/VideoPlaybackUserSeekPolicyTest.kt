@@ -1,14 +1,38 @@
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.android.purebilibili.feature.video.usecase
 
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class VideoPlaybackUserSeekPolicyTest {
+    @Test
+    fun `small backward and forward user seeks are exact without changing the fast seek preference`() {
+        listOf(58_000L, 62_000L).forEach { target ->
+            val player = mockk<ExoPlayer>(relaxed = true)
+            every { player.currentPosition } returns 60_000L
+            every { player.seekParameters } returns SeekParameters.CLOSEST_SYNC
+            every { player.playbackState } returns Player.STATE_READY
+            every { player.playWhenReady } returns false
+
+            seekPlayerFromUserAction(player, target)
+
+            verifyOrder {
+                player.setSeekParameters(SeekParameters.EXACT)
+                player.seekTo(target)
+                player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+            }
+        }
+    }
+
 
     @Test
     fun `shouldResumePlaybackAfterUserSeek keeps playback intent when playWhenReady was true`() {

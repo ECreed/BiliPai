@@ -32,6 +32,15 @@ internal const val BOTTOM_BAR_MAX_VISIBLE_ITEMS = 5
 // 底栏最多有 5 个栏目；预组合其余 4 页，避免跨多页动画途中临时创建中间页面。
 internal const val BOTTOM_PAGER_MAX_PRELOAD_DISTANCE = BOTTOM_BAR_MAX_VISIBLE_ITEMS - 1
 
+internal fun playerDestinationOwnsOrientation(key: BiliPaiNavKey?): Boolean = when (key) {
+    is BiliPaiNavKey.VideoDetail,
+    is BiliPaiNavKey.BangumiPlayer,
+    is BiliPaiNavKey.OfflineVideoPlayer,
+    is BiliPaiNavKey.Live,
+    is BiliPaiNavKey.ExternalMedia -> true
+    else -> false
+}
+
 internal fun resolveTopLevelNavigationAction(
     currentRoute: String?,
     targetRoute: String,

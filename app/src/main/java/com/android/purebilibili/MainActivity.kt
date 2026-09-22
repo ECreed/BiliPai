@@ -8,6 +8,7 @@ import android.app.HandoffActivityDataRequestInfo
 import android.app.HandoffActivityParams
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Outline
@@ -78,6 +79,7 @@ import coil.compose.AsyncImagePainter
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import com.android.purebilibili.core.store.SettingsManager
+import com.android.purebilibili.core.util.resolveAppRequestedOrientation
 import com.android.purebilibili.core.coroutines.AppScope
 
 import com.android.purebilibili.core.theme.LocalDisplayMetricsSnapshot
@@ -800,6 +802,21 @@ open class MainActivity : AppCompatActivity() {
     //  是否在视频页面 (用于决定是否进入 PiP)
     var isInVideoDetail by mutableStateOf(false)
     var isInAudioModeRoute by mutableStateOf(false)
+    private var playbackRouteOwnsOrientation = false
+
+    override fun setRequestedOrientation(requestedOrientation: Int) {
+        val effectiveOrientation = resolveAppRequestedOrientation(
+            requestedOrientation = requestedOrientation,
+            playerOwnsOrientation = playbackRouteOwnsOrientation,
+            smallestScreenWidthDp = resources.configuration.smallestScreenWidthDp,
+            isInMultiWindowMode = isInMultiWindowMode,
+            isInPictureInPictureMode = isInPictureInPictureMode,
+        )
+        // Also guard delayed player cleanup and retained sensor listeners after navigation.
+        if (super.getRequestedOrientation() != effectiveOrientation) {
+            super.setRequestedOrientation(effectiveOrientation)
+        }
+    }
     
     //  小窗管理器
     private lateinit var miniPlayerManager: MiniPlayerManager
@@ -960,6 +977,7 @@ open class MainActivity : AppCompatActivity() {
         VideoRepository.preloadHomeData()
         
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         //  初始调用，后续会根据主题动态更新
         enableEdgeToEdge()
         
@@ -1509,6 +1527,12 @@ open class MainActivity : AppCompatActivity() {
                                     isInVideoDetail = true
                                     refreshAndroid17HandoffAvailability()
                                     Logger.d(TAG, " 进入视频详情页")
+                                },
+                                onPlaybackOrientationOwnerChanged = { playerOwnsOrientation ->
+                                    playbackRouteOwnsOrientation = playerOwnsOrientation
+                                    if (!playerOwnsOrientation) {
+                                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                    }
                                 },
                                 onVideoDetailExit = {
                                     isInVideoDetail = false

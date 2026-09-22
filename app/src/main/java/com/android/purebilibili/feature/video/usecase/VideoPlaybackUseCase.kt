@@ -10,6 +10,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.dash.DashMediaSource
 import com.android.purebilibili.core.cooldown.CooldownStatus
@@ -306,7 +307,19 @@ internal fun seekPlayerFromUserAction(
     if (shouldResume) {
         player.playWhenReady = true
     }
-    player.seekTo(positionMs)
+    // User scrubbing must land at the previewed time. CLOSEST_SYNC can snap a small
+    // rewind forward again, then jump an entire GOP once the finger moves farther.
+    // Keep the configured fast-seek policy for non-interactive playback operations.
+    val exoPlayer = player as? ExoPlayer
+    val previousSeekParameters = exoPlayer?.seekParameters
+    try {
+        exoPlayer?.setSeekParameters(SeekParameters.EXACT)
+        player.seekTo(positionMs)
+    } finally {
+        if (previousSeekParameters != null) {
+            exoPlayer?.setSeekParameters(previousSeekParameters)
+        }
+    }
     if (shouldResume) {
         playPlayerForUserIntent(
             player = player,

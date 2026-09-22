@@ -10,6 +10,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AppTopLevelNavigationPolicyTest {
+    @Test
+    fun `only foreground video destinations own screen rotation`() {
+        assertTrue(playerDestinationOwnsOrientation(BiliPaiNavKey.VideoDetail("BV1test")))
+        assertTrue(playerDestinationOwnsOrientation(BiliPaiNavKey.BangumiPlayer(1, 2)))
+        assertTrue(playerDestinationOwnsOrientation(BiliPaiNavKey.Live(roomId = "1")))
+        assertTrue(playerDestinationOwnsOrientation(BiliPaiNavKey.OfflineVideoPlayer("1")))
+        assertTrue(playerDestinationOwnsOrientation(BiliPaiNavKey.ExternalMedia("1")))
+        assertFalse(playerDestinationOwnsOrientation(BiliPaiNavKey.MainHost))
+        assertFalse(playerDestinationOwnsOrientation(BiliPaiNavKey.Settings))
+        assertFalse(playerDestinationOwnsOrientation(BiliPaiNavKey.Search))
+        assertFalse(playerDestinationOwnsOrientation(BiliPaiNavKey.AudioMode()))
+    }
+
 
     @Test
     fun returnsSkip_whenCurrentRouteAlreadyMatchesTarget() {
