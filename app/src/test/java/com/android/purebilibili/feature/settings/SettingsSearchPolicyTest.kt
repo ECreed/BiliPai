@@ -372,8 +372,8 @@ class SettingsSearchPolicyTest {
     }
 
     @Test
-    fun queryByAutoCheckUpdate_hitsCheckUpdateEntry() {
-        val results = resolveSettingsSearchResults("自动检查更新")
+    fun queryByManualUpdate_hitsCheckUpdateEntry() {
+        val results = resolveSettingsSearchResults("手动更新")
 
         assertTrue(results.any { it.target == SettingsSearchTarget.CHECK_UPDATE })
     }

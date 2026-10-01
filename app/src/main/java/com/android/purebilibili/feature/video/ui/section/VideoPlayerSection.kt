@@ -3267,7 +3267,7 @@ fun VideoPlayerSection(
 
                 // 上滑全屏 / 比例切换：容器尺寸与 resizeMode 可能不同步。
                 // Media3 仅在 mode 变化时 remeasure；FILL 右下黑边多为旧 measure 残留。
-                LaunchedEffect(
+                DisposableEffect(
                     playerViewRef,
                     viewportLayout.width,
                     viewportLayout.height,
@@ -3278,13 +3278,13 @@ fun VideoPlayerSection(
                     playerVideoSize.height,
                     measuredPlayerViewportSize,
                 ) {
-                    val playerView = playerViewRef ?: return@LaunchedEffect
-                    schedulePlayerViewViewportRefresh(
-                        playerView = playerView,
-                        resizeMode = targetResizeMode,
-                        expectedWidth = measuredPlayerViewportSize.width,
-                        expectedHeight = measuredPlayerViewportSize.height,
-                    )
+                    val cancelRefresh = playerViewRef?.let { playerView ->
+                        schedulePlayerViewViewportRefresh(
+                            playerView = playerView,
+                            resizeMode = targetResizeMode,
+                        )
+                    }
+                    onDispose { cancelRefresh?.invoke() }
                 }
 
                 AndroidView(
@@ -3329,6 +3329,13 @@ fun VideoPlayerSection(
                                 View.INVISIBLE
                             }
                         }
+                    },
+                    // Keep the same native View when movableContent moves inline -> fullscreen.
+                    // Surface callbacks own detach/attach; a layout move must not reset playback.
+                    onReset = {},
+                    onRelease = { playerView ->
+                        playerView.player = null
+                        if (playerViewRef === playerView) playerViewRef = null
                     },
                     update = { playerView ->
                         playerViewRef = playerView

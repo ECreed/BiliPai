@@ -2635,7 +2635,7 @@ internal fun VideoDetailScreenStateHolder(
     // 避免在此处重复消耗 InputStream
 
     // 辅助函数：切换全屏状态
-    val toggleFullscreen = {
+    val performToggleFullscreen = {
         val activity = context.findActivity()
         val currentPositionMs = playerState.player.currentPosition.coerceAtLeast(0L)
         val shouldPreserveCurrentFrame = activity != null &&
@@ -2668,6 +2668,24 @@ internal fun VideoDetailScreenStateHolder(
             onUserRequestedFullscreenChange = { requested -> userRequestedFullscreen = requested },
             onManualPortraitHoldActiveChange = { active -> manualPortraitHoldActive = active }
         )
+    }
+
+    // An early tap is retained, but changing orientation while the entry card still owns
+    // portrait bounds can leave the native Surface at that size in the landscape window.
+    var pendingEntryFullscreen by remember(currentBvid) { mutableStateOf(false) }
+    val toggleFullscreen: () -> Unit = {
+        if (shouldDeferFullscreenUntilEntrySettles(entryTransitionFinished, isFullscreenMode)) {
+            pendingEntryFullscreen = !pendingEntryFullscreen
+        } else {
+            pendingEntryFullscreen = false
+            performToggleFullscreen()
+        }
+    }
+    LaunchedEffect(entryTransitionFinished, pendingEntryFullscreen, isVisible, isFullscreenMode) {
+        if (pendingEntryFullscreen && entryTransitionFinished && isVisible) {
+            pendingEntryFullscreen = false
+            if (!isFullscreenMode) performToggleFullscreen()
+        }
     }
 
     val localBackTarget = resolveVideoDetailLocalBackTarget(

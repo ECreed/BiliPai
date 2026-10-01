@@ -142,8 +142,6 @@ fun SettingsScreen(
         .collectAsStateWithLifecycle(initialValue = SettingsManager.AutoCacheClearInterval.NEVER)
     val feedApiType by SettingsManager.getFeedApiType(context).collectAsStateWithLifecycle(initialValue = SettingsManager.FeedApiType.WEB
     )
-    val autoCheckUpdateEnabled by SettingsManager.getAutoCheckAppUpdate(context)
-        .collectAsStateWithLifecycle(initialValue = true)
     val appUpdateChannel by SettingsManager.getAppUpdateChannel(context)
         .collectAsStateWithLifecycle(initialValue = SettingsManager.AppUpdateChannel.STABLE)
     val incrementalTimelineRefreshEnabled by SettingsManager.getIncrementalTimelineRefresh(context)
@@ -334,9 +332,6 @@ fun SettingsScreen(
     }
     val onEasterEggChange: (Boolean) -> Unit = { enabled ->
         scope.launch { SettingsManager.setEasterEggEnabled(context, enabled) }
-    }
-    val onAutoCheckUpdateChange: (Boolean) -> Unit = { enabled ->
-        scope.launch { SettingsManager.setAutoCheckAppUpdate(context, enabled) }
     }
     val onAppUpdateChannelChange: (SettingsManager.AppUpdateChannel) -> Unit = { channel ->
         scope.launch { SettingsManager.setAppUpdateChannel(context, channel) }
@@ -1036,7 +1031,6 @@ fun SettingsScreen(
                     onAnalyticsChange = onAnalyticsChange,
                     onEnhancedDiagnosticLoggingChange = onEnhancedDiagnosticLoggingChange,
                     onEasterEggChange = onEasterEggChange,
-                    onAutoCheckUpdateChange = onAutoCheckUpdateChange,
                     onAppUpdateChannelChange = onAppUpdateChannelChange,
                     privacyModeEnabled = privacyModeEnabled,
                     customDownloadPath = downloadExportTreeUri ?: customDownloadPath,
@@ -1054,7 +1048,6 @@ fun SettingsScreen(
                     easterEggEnabled = easterEggEnabled,
                     updateStatusText = updateStatusText,
                     isCheckingUpdate = isCheckingUpdate,
-                    autoCheckUpdateEnabled = autoCheckUpdateEnabled,
                     appUpdateChannel = appUpdateChannel,
                     privacyContentAuthenticationEnabled = privacyContentAuthenticationEnabled,
                     verificationLabel = buildVerificationLabel,
@@ -1193,7 +1186,6 @@ private fun MobileSettingsNavLayout(
     onAnalyticsChange: (Boolean) -> Unit,
     onEnhancedDiagnosticLoggingChange: (Boolean) -> Unit,
     onEasterEggChange: (Boolean) -> Unit,
-    onAutoCheckUpdateChange: (Boolean) -> Unit,
     onAppUpdateChannelChange: (SettingsManager.AppUpdateChannel) -> Unit,
     privacyModeEnabled: Boolean,
     privacyContentAuthenticationEnabled: Boolean,
@@ -1212,7 +1204,6 @@ private fun MobileSettingsNavLayout(
     easterEggEnabled: Boolean,
     updateStatusText: String,
     isCheckingUpdate: Boolean,
-    autoCheckUpdateEnabled: Boolean,
     appUpdateChannel: SettingsManager.AppUpdateChannel,
     verificationLabel: String,
     verificationSubtitle: String,
@@ -1291,7 +1282,6 @@ private fun MobileSettingsNavLayout(
         onAnalyticsChange = onAnalyticsChange,
         onEnhancedDiagnosticLoggingChange = onEnhancedDiagnosticLoggingChange,
         onEasterEggChange = onEasterEggChange,
-        onAutoCheckUpdateChange = onAutoCheckUpdateChange,
         onAppUpdateChannelChange = onAppUpdateChannelChange,
         onFeedApiTypeChange = onFeedApiTypeChange,
         onIncrementalTimelineRefreshChange = onIncrementalTimelineRefreshChange,
@@ -1318,7 +1308,6 @@ private fun MobileSettingsNavLayout(
         easterEggEnabled = easterEggEnabled,
         updateStatusText = updateStatusText,
         isCheckingUpdate = isCheckingUpdate,
-        autoCheckUpdateEnabled = autoCheckUpdateEnabled,
         appUpdateChannel = appUpdateChannel,
         verificationLabel = verificationLabel,
         verificationSubtitle = verificationSubtitle,

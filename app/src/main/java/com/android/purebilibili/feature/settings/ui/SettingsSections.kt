@@ -238,7 +238,6 @@ internal data class SettingsRootCategoryActions(
     val onAnalyticsChange: (Boolean) -> Unit,
     val onEnhancedDiagnosticLoggingChange: (Boolean) -> Unit,
     val onEasterEggChange: (Boolean) -> Unit,
-    val onAutoCheckUpdateChange: (Boolean) -> Unit,
     val onAppUpdateChannelChange: (com.android.purebilibili.core.store.SettingsManager.AppUpdateChannel) -> Unit,
     val onFeedApiTypeChange: (com.android.purebilibili.core.store.SettingsManager.FeedApiType) -> Unit,
     val onIncrementalTimelineRefreshChange: (Boolean) -> Unit,
@@ -266,7 +265,6 @@ internal data class SettingsRootCategoryState(
     val easterEggEnabled: Boolean,
     val updateStatusText: String,
     val isCheckingUpdate: Boolean,
-    val autoCheckUpdateEnabled: Boolean,
     val appUpdateChannel: com.android.purebilibili.core.store.SettingsManager.AppUpdateChannel,
     val verificationLabel: String,
     val verificationSubtitle: String,
@@ -1068,8 +1066,6 @@ internal fun SettingsRootCategoryContent(
                             onBuildFingerprintClick = actions.onBuildFingerprintClick,
                             onCheckUpdateClick = actions.onCheckUpdateClick,
                             onViewReleaseNotesClick = actions.onViewReleaseNotesClick,
-                            autoCheckUpdateEnabled = state.autoCheckUpdateEnabled,
-                            onAutoCheckUpdateChange = actions.onAutoCheckUpdateChange,
                             appUpdateChannel = state.appUpdateChannel,
                             onAppUpdateChannelChange = actions.onAppUpdateChannelChange,
                             onVersionClick = actions.onVersionClick,
@@ -1918,8 +1914,6 @@ fun AboutSection(
     onBuildFingerprintClick: () -> Unit,
     onCheckUpdateClick: () -> Unit,
     onViewReleaseNotesClick: () -> Unit,
-    autoCheckUpdateEnabled: Boolean,
-    onAutoCheckUpdateChange: (Boolean) -> Unit,
     appUpdateChannel: SettingsManager.AppUpdateChannel,
     onAppUpdateChannelChange: (SettingsManager.AppUpdateChannel) -> Unit,
     onVersionClick: () -> Unit,
@@ -1953,7 +1947,6 @@ fun AboutSection(
     val checkUpdateVisual = rememberSettingsEntryVisual(SettingsSearchTarget.CHECK_UPDATE)
     val releaseNotesVisual = rememberSettingsEntryVisual(SettingsSearchTarget.VIEW_RELEASE_NOTES)
     val replayOnboardingVisual = rememberSettingsEntryVisual(SettingsSearchTarget.REPLAY_ONBOARDING)
-    val notificationIcon = rememberSettingsSemanticIcon(SettingsIconRole.AUTO_CHECK_UPDATE)
     val infoIcon = rememberSettingsSemanticIcon(SettingsIconRole.APP_VERSION)
     val sparklesIcon = rememberSettingsSemanticIcon(SettingsIconRole.EASTER_EGG)
     val verificationIcon = rememberSettingsSemanticIcon(SettingsIconRole.BUILD_VERIFICATION)
@@ -2133,15 +2126,6 @@ fun AboutSection(
             value = "最新版本说明",
             onClick = onViewReleaseNotesClick,
             iconTint = updateSiblingTints[2]
-        )
-        SettingsAdaptiveDivider()
-        SettingSwitchItem(
-            icon = notificationIcon,
-            title = "自动检查更新",
-            subtitle = resolveAutoCheckUpdateSubtitle(autoCheckEnabled = autoCheckUpdateEnabled),
-            checked = autoCheckUpdateEnabled,
-            onCheckedChange = onAutoCheckUpdateChange,
-            iconTint = updateSiblingTints[3]
         )
         SettingsAdaptiveDivider()
         SettingsSingleChoicePreference(

@@ -41,25 +41,18 @@ class AppUpdateUiPolicyTest {
     }
 
     @Test
-    fun autoCheckSubtitle_mentionsAppEntry_whenEnabled() {
-        assertEquals(
-            "进入应用时自动检查新版本",
-            resolveAutoCheckUpdateSubtitle(autoCheckEnabled = true)
-        )
-    }
+    fun updateChecksAreOnlyAvailableFromSettings() {
+        val sourceRoot = listOf("src/main/java", "app/src/main/java")
+            .map { java.io.File(it) }.first { it.exists() }
+        val appRoot = java.io.File(sourceRoot, "com/android/purebilibili")
+        val activity = java.io.File(appRoot, "MainActivity.kt").readText()
+        val settings = java.io.File(appRoot, "feature/settings/screen/SettingsScreen.kt").readText()
+        val sections = java.io.File(appRoot, "feature/settings/ui/SettingsSections.kt").readText()
 
-    @Test
-    fun autoCheckSubtitle_guidesManualCheck_whenDisabled() {
-        assertEquals(
-            "关闭后仅手动检查",
-            resolveAutoCheckUpdateSubtitle(autoCheckEnabled = false)
-        )
-    }
-
-    @Test
-    fun appEntryAutoCheck_requiresBothToggleAndGate() {
-        assertTrue(shouldRunAppEntryAutoCheck(autoCheckEnabled = true, gateAllowsCheck = true))
-        assertFalse(shouldRunAppEntryAutoCheck(autoCheckEnabled = false, gateAllowsCheck = true))
-        assertFalse(shouldRunAppEntryAutoCheck(autoCheckEnabled = true, gateAllowsCheck = false))
+        assertFalse(activity.contains("AppUpdateChecker"))
+        assertFalse(activity.contains("AppUpdateDialogHost"))
+        assertFalse(sections.contains("自动检查更新"))
+        assertTrue(settings.contains("AppUpdateChecker.check("))
+        assertTrue(sections.contains("onClick = onCheckUpdateClick"))
     }
 }

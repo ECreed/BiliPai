@@ -169,42 +169,38 @@ internal fun shouldRefreshMeasuredPlayerViewport(
 }
 
 /**
- * 同步 + 下一帧再刷一次，覆盖上滑全屏首帧约束/ surface attach 竞态。
+ * 在当前布局提交后刷新内部 content frame，不能只比较 PlayerView 的外框尺寸。
+ * 入场时立即全屏/折叠评论区会连续改约束；外框已经正确时，Surface 仍可能保留旧测量。
+ * 返回取消函数，防止上一轮布局的异步回调落到已移动/释放的 View 上。
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 internal fun schedulePlayerViewViewportRefresh(
     playerView: androidx.media3.ui.PlayerView,
     resizeMode: Int,
-    expectedWidth: Int = 0,
-    expectedHeight: Int = 0,
-) {
+): () -> Unit {
     applyPlayerViewResizeMode(
         playerView = playerView,
         resizeMode = resizeMode,
         forceRelayout = true,
     )
-    playerView.post {
-        applyPlayerViewResizeMode(
-            playerView = playerView,
-            resizeMode = resizeMode,
-            forceRelayout = true,
-        )
-        playerView.postOnAnimation {
-            if (shouldRefreshMeasuredPlayerViewport(
-                    expectedWidth = expectedWidth,
-                    expectedHeight = expectedHeight,
-                    measuredWidth = playerView.width,
-                    measuredHeight = playerView.height
-                )
-            ) {
-                applyPlayerViewResizeMode(
-                    playerView = playerView,
-                    resizeMode = resizeMode,
-                    forceRelayout = true,
-                )
-            }
+    val refresh = Runnable {
+        if (playerView.isAttachedToWindow && playerView.width > 0 && playerView.height > 0) {
+            // Always use the live bounds, never restore dimensions captured before rotation.
+            // AndroidView can reuse the same outer measure while Media3 changes aspect ratio.
+            playerView.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_content_frame)
+                ?.forceLayout()
+            playerView.videoSurfaceView?.forceLayout()
+            playerView.forceLayout()
+            playerView.measure(
+                android.view.View.MeasureSpec.makeMeasureSpec(playerView.width, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(playerView.height, android.view.View.MeasureSpec.EXACTLY),
+            )
+            playerView.layout(playerView.left, playerView.top, playerView.right, playerView.bottom)
+            playerView.invalidate()
         }
     }
+    playerView.postOnAnimation(refresh)
+    return { playerView.removeCallbacks(refresh) }
 }
 
 /**

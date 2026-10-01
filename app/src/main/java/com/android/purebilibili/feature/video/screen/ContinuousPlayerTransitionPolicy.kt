@@ -27,6 +27,11 @@ internal data class ContinuousPlayerTransitionDecision(
         ContinuousPlayerOrientationRequest.None,
 )
 
+internal fun shouldDeferFullscreenUntilEntrySettles(
+    entryTransitionFinished: Boolean,
+    isFullscreen: Boolean,
+): Boolean = !entryTransitionFinished && !isFullscreen
+
 internal fun shouldKeepContinuousPlayerEnterPhaseWhilePortrait(
     phase: ContinuousPlayerTransitionPhase,
     isLandscape: Boolean,

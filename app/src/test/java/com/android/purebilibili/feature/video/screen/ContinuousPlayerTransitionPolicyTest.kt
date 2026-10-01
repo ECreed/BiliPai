@@ -8,6 +8,13 @@ import kotlin.test.assertTrue
 class ContinuousPlayerTransitionPolicyTest {
 
     @Test
+    fun earlyFullscreenWaitsForEntryButFullscreenExitDoesNot() {
+        assertEquals(true, shouldDeferFullscreenUntilEntrySettles(false, false))
+        assertEquals(false, shouldDeferFullscreenUntilEntrySettles(true, false))
+        assertEquals(false, shouldDeferFullscreenUntilEntrySettles(false, true))
+    }
+
+    @Test
     fun enteringFullscreenRequestsLandscapeOnlyAfterExpansionFinishes() {
         val expanding = reduceContinuousPlayerTransition(
             phase = ContinuousPlayerTransitionPhase.Inline,
