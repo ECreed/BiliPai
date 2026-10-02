@@ -4,8 +4,30 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertEquals
+import kotlinx.collections.immutable.persistentListOf
+import com.android.purebilibili.data.model.response.ReplyItem
 
 class VideoCommentViewModelTest {
+
+    @Test
+    fun commentFailurePreservesPageAndRepliesWithoutPretendingToReachEnd() {
+        val before = CommentUiState(
+            replies = persistentListOf(ReplyItem(rpid = 1L)),
+            nextPage = 2,
+            grpcNextOffset = "next-cursor",
+            isRepliesLoading = true
+        )
+        val failed = before.withCommentLoadFailure("请求超时")
+        assertFalse(failed.isRepliesEnd)
+        assertFalse(failed.isRepliesLoading)
+        assertFalse(failed.canLoadComments()) // 不在失败后无限自动重试。
+        assertEquals(before.replies, failed.replies)
+        assertEquals(2, failed.nextPage)
+        assertEquals("next-cursor", failed.grpcNextOffset)
+        assertTrue(failed.copy(repliesError = null).canLoadComments())
+        assertFalse(failed.copy(repliesError = null, isRepliesLoading = true).canLoadComments())
+    }
 
     @Test
     fun `comment result applies only to current video subject`() {

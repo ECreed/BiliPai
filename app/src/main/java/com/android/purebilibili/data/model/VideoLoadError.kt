@@ -70,7 +70,7 @@ sealed class VideoLoadError {
         } else {
             "该视频暂时无法播放\n请稍后重试"
         }
-        is GlobalCooldown -> "当前网络环境异常\n建议切换网络后重试"
+        is GlobalCooldown -> "连续加载失败，已暂停自动请求\n可点击重试重新加载"
         is PlayUrlEmpty -> "视频加载失败\n请尝试切换网络或稍后重试"
     }
     
@@ -92,6 +92,16 @@ sealed class VideoLoadError {
         is VideoNotFound -> false
         is RegionRestricted -> false
         is VipRequired -> false
+    }
+
+    // 冷却只限制自动请求，用户始终可以主动重试，不需要清除应用数据。
+    fun canRetryManually(): Boolean = isRetryable() || this is RateLimited || this is GlobalCooldown
+
+    // 普通断网、超时、视频删除和取消请求都不能作为风控依据封锁其他视频。
+    fun shouldTriggerPlaybackCooldown(): Boolean = when (this) {
+        WbiSignatureError, PlayUrlEmpty -> true
+        is ApiError -> code in setOf(-352, -412, 412, 429)
+        else -> false
     }
     
     companion object {

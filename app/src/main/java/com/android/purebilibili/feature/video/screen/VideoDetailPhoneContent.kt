@@ -243,6 +243,8 @@ internal fun VideoDetailPhoneSuccessContentLayer(
                                 onSubReplyClick = commentActions.openSubReply,
                                 onCommentReplyClick = playbackActions.replyTo,
                                 onLoadMoreReplies = commentActions.loadComments,
+                                repliesError = commentState.repliesError,
+                                onRetryReplies = commentActions.retryComments,
                                 onCommentUrlClick = openCommentUrl,
                                 onDescriptionUrlClick = onOpenBilibiliLink,
                                 onSearchKeywordClick = onSearchKeywordClick,

@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -48,6 +51,15 @@ internal fun shouldApplyCommentSubjectResult(
 ): Boolean {
     return expectedSubject.isValid && expectedSubject == currentSubject
 }
+
+internal fun CommentUiState.canLoadComments(): Boolean =
+    !isRepliesLoading && !isRepliesEnd && repliesError == null
+
+internal fun CommentUiState.withCommentLoadFailure(message: String): CommentUiState = copy(
+    isRepliesLoading = false,
+    repliesError = message,
+    isRepliesEnd = false
+)
 
 internal fun shouldApplySubReplyResult(
     expectedSubject: CommentSubjectKey,
@@ -231,6 +243,7 @@ class VideoCommentViewModel : ViewModel() {
 
     private var currentAid: Long = 0
     private var currentSubject: CommentSubjectKey = CommentSubjectKey(0L)
+    private var commentLoadJob: Job? = null
     
     //  存储原始评论列表（未经筛选），用于筛选切换
     private var allReplies: List<ReplyItem> = emptyList()
@@ -239,6 +252,7 @@ class VideoCommentViewModel : ViewModel() {
      * 切换视频时立即废弃旧评论主体和未完成请求，等新页面真正打开评论区后再加载。
      */
     fun clearForVideoChange() {
+        commentLoadJob?.cancel()
         currentAid = 0L
         currentSubject = CommentSubjectKey(0L)
         allReplies = emptyList()
@@ -264,6 +278,7 @@ class VideoCommentViewModel : ViewModel() {
             }
             return
         }
+        commentLoadJob?.cancel()
         currentAid = aid
         currentSubject = CommentSubjectKey(oid = aid)
         allReplies = emptyList()
@@ -296,6 +311,7 @@ class VideoCommentViewModel : ViewModel() {
         if (currentState.sortMode == mode) return
         
         android.util.Log.d("CommentVM", " setSortMode")
+        commentLoadJob?.cancel()
         
         allReplies = emptyList()
         _commentState.value = CommentUiState(
@@ -309,13 +325,14 @@ class VideoCommentViewModel : ViewModel() {
 
     fun loadComments() {
         val currentState = _commentState.value
-        if (currentState.isRepliesEnd || currentState.isRepliesLoading) return
+        // 错误和真正的末页分开：暂停自动分页，但保留原页供用户重试。
+        if (!currentState.canLoadComments()) return
         val requestSubject = currentSubject
         if (!requestSubject.isValid) return
 
         _commentState.value = currentState.copy(isRepliesLoading = true, repliesError = null)
 
-        viewModelScope.launch {
+        commentLoadJob = viewModelScope.launch {
             val pageToLoad = currentState.nextPage
             //  使用当前排序模式
             val result = CommentRepository.getComments(
@@ -325,6 +342,7 @@ class VideoCommentViewModel : ViewModel() {
                 mode = currentState.sortMode.apiMode,
                 paginationOffset = currentState.grpcNextOffset
             )
+            currentCoroutineContext().ensureActive()
 
             result.onSuccess { data ->
                 if (!shouldApplyCommentSubjectResult(requestSubject, currentSubject)) {
@@ -394,13 +412,21 @@ class VideoCommentViewModel : ViewModel() {
                     return@onFailure
                 }
                 android.util.Log.e("CommentVM", " loadComments error: ${e.message}")
-                _commentState.value = _commentState.value.copy(
-                    isRepliesLoading = false,
-                    repliesError = e.message ?: "加载评论失败",
-                    isRepliesEnd = true  //  [修复] 出错时也标记为结束，防止无限重试
+                _commentState.value = _commentState.value.withCommentLoadFailure(
+                    e.message ?: "加载评论失败"
                 )
             }
         }
+    }
+
+    fun retryComments() {
+        if (_commentState.value.isRepliesLoading) return
+        if (_commentState.value.replies.isEmpty()) {
+            reloadCommentsFromStart()
+            return
+        }
+        _commentState.value = _commentState.value.copy(repliesError = null, isRepliesEnd = false)
+        loadComments()
     }
 
     // --- 二级评论逻辑 ---
@@ -1179,10 +1205,12 @@ class VideoCommentViewModel : ViewModel() {
     }
 
     private fun reloadCommentsFromStart() {
+        commentLoadJob?.cancel()
         allReplies = emptyList()
         _commentState.value = _commentState.value.copy(
             replies = emptyList<ReplyItem>().toImmutableList(),
             nextPage = 1,
+            grpcNextOffset = null,
             isRepliesEnd = false,
             isRepliesLoading = false,
             repliesError = null

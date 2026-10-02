@@ -590,6 +590,9 @@ class VideoDetailLayoutModePolicyTest {
 
     @Test
     fun autoRotateSensorPolicy_requiresStrongerTiltToEnterLandscapeButKeepsLandscapeStable() {
+        for (angle in listOf(65, 115, 245, 295)) {
+            assertEquals(null, resolvePhoneAutoRotateRequestedOrientation(angle, false))
+        }
         assertEquals(
             null,
             resolvePhoneAutoRotateRequestedOrientation(

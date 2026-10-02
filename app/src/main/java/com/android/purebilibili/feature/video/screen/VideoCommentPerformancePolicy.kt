@@ -15,9 +15,10 @@ internal fun shouldLoadMoreVideoComments(
     totalItemsCount: Int,
     isLoading: Boolean,
     isEnd: Boolean,
-    prefetchThreshold: Int = 3
+    prefetchThreshold: Int = 3,
+    hasError: Boolean = false
 ): Boolean {
-    if (isLoading || isEnd) return false
+    if (isLoading || isEnd || hasError) return false
     if (totalItemsCount <= 0 || lastVisibleItemIndex < 0) return false
     return lastVisibleItemIndex >= totalItemsCount - 1 - prefetchThreshold
 }

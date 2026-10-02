@@ -8,6 +8,12 @@ import kotlin.test.assertTrue
 class VideoCommentPerformancePolicyTest {
 
     @Test
+    fun failedPageWaitsForExplicitRetryInsteadOfAutoLoading() {
+        assertFalse(shouldLoadMoreVideoComments(19, 20, false, false, hasError = true))
+        assertTrue(shouldLoadMoreVideoComments(19, 20, false, false, hasError = false))
+    }
+
+    @Test
     fun `video detail should avoid preloading adjacent page while video is playing`() {
         assertEquals(0, resolveVideoDetailBeyondViewportPageCount(isVideoPlaying = true))
         assertEquals(1, resolveVideoDetailBeyondViewportPageCount(isVideoPlaying = false))

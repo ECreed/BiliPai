@@ -914,7 +914,7 @@ internal fun DetachedVideoCommentThreadHost(
         onBackToTop = onBackToTop,
         forceInitialize = forceInitialize,
         handleFraudEvents = false,
-        // 楼中楼（嵌入呈现）不盖全屏阴影：播放器上方保持可见，点背景关闭仍有效。
+        // 楼中楼不盖全屏阴影，预留的播放器区域继续接收点击和手势。
         maxScrimAlphaOverride = 0f
     )
 }

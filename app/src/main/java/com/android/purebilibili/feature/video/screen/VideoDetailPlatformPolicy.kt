@@ -646,8 +646,8 @@ internal fun resolvePhoneAutoRotateRequestedOrientation(
     orientationDegrees: Int,
     isCurrentlyLandscape: Boolean,
     portraitSnapDegrees: Int = 25,
-    landscapeEnterMinDegrees: Int = 60,
-    landscapeEnterMaxDegrees: Int = 120,
+    landscapeEnterMinDegrees: Int = 75,
+    landscapeEnterMaxDegrees: Int = 105,
     landscapeKeepMinDegrees: Int = 40,
     landscapeKeepMaxDegrees: Int = 140
 ): Int? {
@@ -667,8 +667,8 @@ internal fun resolvePhoneAutoRotateRequestedOrientation(
         orientationDegrees = normalized,
         minLeftSideTopDegrees = landscapeEnterMinDegrees,
         maxLeftSideTopDegrees = landscapeEnterMaxDegrees,
-        minRightSideTopDegrees = 240,
-        maxRightSideTopDegrees = 300
+        minRightSideTopDegrees = 180 + landscapeEnterMinDegrees,
+        maxRightSideTopDegrees = 180 + landscapeEnterMaxDegrees
     )
     val exactLandscapeKeep = resolveExactLandscapeOrientation(
         orientationDegrees = normalized,
@@ -688,6 +688,7 @@ internal fun resolvePhoneAutoRotateRequestedOrientation(
 }
 
 internal const val PHONE_AUTO_ROTATE_LANDSCAPE_SETTLE_MS = 500L
+internal const val PHONE_AUTO_ROTATE_STABILITY_MS = 700L
 
 internal fun resolvePhoneAutoRotateTargetToApply(
     candidateOrientation: Int?,

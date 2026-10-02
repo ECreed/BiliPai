@@ -3485,7 +3485,7 @@ class VideoPlaybackViewModel : ViewModel() {
                     return@launch
                 }
                 Logger.e("PlayerVM", "⚠️ Video load timed out for ${playbackRequest.bvid}")
-                PlaybackCooldownManager.recordFailure(playbackRequest.bvid, "timeout")
+                // 加载超时不是服务端风控，不计入全局冷却。
                 _uiState.value = VideoPlaybackUiState.Error(VideoLoadError.Timeout)
             } catch (e: CancellationException) {
                 Logger.d("PlayerVM", "loadVideo canceled: bvid=${playbackRequest.bvid} token=$requestToken")

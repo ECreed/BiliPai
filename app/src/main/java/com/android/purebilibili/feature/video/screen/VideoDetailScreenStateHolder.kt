@@ -486,6 +486,7 @@ internal fun VideoDetailScreenStateHolder(
     val commentActions = remember(commentViewModel) {
         VideoDetailCommentActions(
             loadComments = commentViewModel::loadComments,
+            retryComments = commentViewModel::retryComments,
             setSortMode = commentViewModel::setSortMode,
             deleteComment = commentViewModel::deleteComment,
             startDissolve = commentViewModel::startDissolve,
@@ -2221,6 +2222,25 @@ internal fun VideoDetailScreenStateHolder(
         )
     }
     var lastPhoneAutoRotateLandscapeAppliedAtMs by remember { mutableStateOf<Long?>(null) }
+    var phoneAutoRotateCandidate by remember { mutableStateOf<Int?>(null) }
+
+    // 同一方向稳定一段时间再旋转；角度离开候选区会取消等待。
+    // 使用计时协程而非计数传感器事件，静止后不再回调也能正常进入全屏。
+    LaunchedEffect(phoneAutoRotateCandidate) {
+        val candidate = phoneAutoRotateCandidate ?: return@LaunchedEffect
+        val hostActivity = activity ?: return@LaunchedEffect
+        if (hostActivity.requestedOrientation == candidate) return@LaunchedEffect
+        kotlinx.coroutines.delay(PHONE_AUTO_ROTATE_STABILITY_MS)
+        val nowMs = SystemClock.elapsedRealtime()
+        val targetToApply = resolvePhoneAutoRotateTargetToApply(
+            candidateOrientation = candidate,
+            lastLandscapeAppliedAtMs = lastPhoneAutoRotateLandscapeAppliedAtMs,
+            nowMs = nowMs
+        ) ?: return@LaunchedEffect
+        hostActivity.applyPlayerRequestedOrientation(targetToApply)
+        lastPhoneAutoRotateLandscapeAppliedAtMs =
+            if (isLandscapeRequestedOrientation(targetToApply)) nowMs else null
+    }
 
     LaunchedEffect(
         autoRotateEnabled,
@@ -2279,6 +2299,7 @@ internal fun VideoDetailScreenStateHolder(
         val orientationListener = object : OrientationEventListener(context) {
             override fun onOrientationChanged(orientation: Int) {
                 if (manualPortraitHoldActive) {
+                    phoneAutoRotateCandidate = null
                     if (shouldReleasePhoneManualPortraitHold(orientation)) {
                         manualPortraitHoldActive = false
                     }
@@ -2286,19 +2307,10 @@ internal fun VideoDetailScreenStateHolder(
                 }
                 val isCurrentlyLandscape =
                     hostActivity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-                val targetOrientation = resolvePhoneAutoRotateRequestedOrientation(
+                phoneAutoRotateCandidate = resolvePhoneAutoRotateRequestedOrientation(
                     orientationDegrees = orientation,
                     isCurrentlyLandscape = isCurrentlyLandscape
                 )
-                val nowMs = SystemClock.elapsedRealtime()
-                val targetToApply = resolvePhoneAutoRotateTargetToApply(
-                    candidateOrientation = targetOrientation,
-                    lastLandscapeAppliedAtMs = lastPhoneAutoRotateLandscapeAppliedAtMs,
-                    nowMs = nowMs
-                ) ?: return
-                hostActivity.applyPlayerRequestedOrientation(targetToApply)
-                lastPhoneAutoRotateLandscapeAppliedAtMs =
-                    if (isLandscapeRequestedOrientation(targetToApply)) nowMs else null
             }
         }
 
@@ -2308,6 +2320,7 @@ internal fun VideoDetailScreenStateHolder(
 
         onDispose {
             orientationListener.disable()
+            phoneAutoRotateCandidate = null
             lastPhoneAutoRotateLandscapeAppliedAtMs = null
         }
     }
@@ -2974,6 +2987,8 @@ internal fun VideoDetailScreenStateHolder(
                             onUpClick = navigateToUserSpaceFromVideo,
                             onSubReplyClick = commentActions.openSubReply,
                             onCommentReplyClick = playbackActions.replyTo, onLoadMoreReplies = commentActions.loadComments,
+                            repliesError = commentState.repliesError,
+                            onRetryReplies = commentActions.retryComments,
                             onDeleteComment = commentActions.deleteComment, onDissolveStart = commentActions.startDissolve,
                             onCommentLike = commentActions.likeComment,
                             onCommentHate = commentActions.hateComment,
@@ -3209,6 +3224,8 @@ internal fun VideoDetailScreenStateHolder(
                             onSubReplyClick = commentActions.openSubReply,
                             onCommentReplyClick = playbackActions.replyTo,
                             onLoadMoreReplies = commentActions.loadComments,
+                            repliesError = commentState.repliesError,
+                            onRetryReplies = commentActions.retryComments,
                             onDeleteComment = commentActions.deleteComment,
                             onDissolveStart = commentActions.startDissolve,
                             onCommentLike = commentActions.likeComment,
@@ -4289,11 +4306,10 @@ internal fun VideoDetailScreenStateHolder(
 
                                             //  针对风控错误显示额外建议
                                             when (errorState.error) {
-                                                is com.android.purebilibili.data.model.VideoLoadError.GlobalCooldown,
                                                 is com.android.purebilibili.data.model.VideoLoadError.PlayUrlEmpty -> {
                                                     Spacer(Modifier.height(8.dp))
                                                     AppText(
-                                                        text = " 建议：切换 WiFi/移动数据 或 清除缓存后重试",
+                                                        text = "播放地址获取失败，可点击重试或稍后再试",
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                         fontSize = 13.sp,
                                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -4312,9 +4328,7 @@ internal fun VideoDetailScreenStateHolder(
                                             }
 
                                             //  只有可重试的错误才显示重试按钮（或者风控错误允许强制重试）
-                                            val showRetryButton = errorState.canRetry ||
-                                                errorState.error is com.android.purebilibili.data.model.VideoLoadError.RateLimited ||
-                                                errorState.error is com.android.purebilibili.data.model.VideoLoadError.PlayUrlEmpty
+                                            val showRetryButton = errorState.canRetry || errorState.error.canRetryManually()
                                             if (showRetryButton) {
                                                 Spacer(Modifier.height(24.dp))
                                                 AppButton(

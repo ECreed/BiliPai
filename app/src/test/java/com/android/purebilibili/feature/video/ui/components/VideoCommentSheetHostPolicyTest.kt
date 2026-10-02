@@ -9,6 +9,25 @@ import kotlin.test.assertTrue
 class VideoCommentSheetHostPolicyTest {
 
     @Test
+    fun threadWithReservedPlayerAreaDoesNotInterceptVideoTouches() {
+        assertFalse(shouldInterceptVideoCommentSheetHostBackdropTap(
+            mainSheetVisible = true,
+            hostContent = VideoCommentSheetHostContent.THREAD_DETAIL,
+            topReservedPx = 450
+        ))
+        assertTrue(shouldInterceptVideoCommentSheetHostBackdropTap(
+            mainSheetVisible = true,
+            hostContent = VideoCommentSheetHostContent.MAIN_LIST,
+            topReservedPx = 450
+        ))
+        assertTrue(shouldInterceptVideoCommentSheetHostBackdropTap(
+            mainSheetVisible = true,
+            hostContent = VideoCommentSheetHostContent.THREAD_DETAIL,
+            topReservedPx = 0
+        ))
+    }
+
+    @Test
     fun `thread detail return keeps the hoisted main comment list state`() {
         val source = File(
             "src/main/java/com/android/purebilibili/feature/video/ui/components/VideoCommentSheetHost.kt"

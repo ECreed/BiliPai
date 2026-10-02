@@ -445,6 +445,8 @@ fun VideoContentSection(
     onSubReplyClick: (ReplyItem, Long) -> Unit,
     onCommentReplyClick: (ReplyItem) -> Unit = {},
     onLoadMoreReplies: () -> Unit,
+    repliesError: String? = null,
+    onRetryReplies: () -> Unit = {},
     onDownloadClick: () -> Unit = {},
     onWatchLaterClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
@@ -803,6 +805,8 @@ fun VideoContentSection(
                         onSubReplyClick = onSubReplyClick,
                         onCommentReplyClick = onCommentReplyClick,
                         onLoadMoreReplies = onLoadMoreReplies,
+                        repliesError = repliesError,
+                        onRetryReplies = onRetryReplies,
                         onImagePreview = { images, index, rect, textContent ->
                             previewImages = images
                             previewInitialIndex = index
@@ -1154,6 +1158,8 @@ internal fun VideoCommentTab(
     onSubReplyClick: (ReplyItem, Long) -> Unit,
     onCommentReplyClick: (ReplyItem) -> Unit,
     onLoadMoreReplies: () -> Unit,
+    repliesError: String? = null,
+    onRetryReplies: () -> Unit = {},
     onImagePreview: (List<String>, Int, Rect?, ImagePreviewTextContent?) -> Unit,
     onTimestampClick: ((Long) -> Unit)?,
     contentPadding: PaddingValues,
@@ -1193,7 +1199,8 @@ internal fun VideoCommentTab(
         replies.size,
         replyCount,
         isRepliesLoading,
-        isRepliesEnd
+        isRepliesEnd,
+        repliesError
     ) {
         derivedStateOf {
             shouldLoadMoreVideoComments(
@@ -1201,7 +1208,8 @@ internal fun VideoCommentTab(
                 totalItemsCount = listState.layoutInfo.totalItemsCount,
                 isLoading = isRepliesLoading,
                 // 置顶/热评会额外插入列表，已渲染条数不能推断服务端分页已结束。
-                isEnd = isRepliesEnd
+                isEnd = isRepliesEnd,
+                hasError = repliesError != null
             )
         }
     }
@@ -1240,16 +1248,18 @@ internal fun VideoCommentTab(
                 item {
                     com.android.purebilibili.core.ui.skeleton.CommentListColumnSkeleton()
                 }
+            } else if (replies.isEmpty() && (repliesError != null || replyCount > 0)) {
+                item {
+                    com.android.purebilibili.feature.video.ui.components.CommentLoadError(
+                        message = repliesError ?: "评论暂时无法加载，请重试",
+                        onRetry = onRetryReplies
+                    )
+                }
             } else if (replies.isEmpty()) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        // replyCount 来自详情/游标 all_count：>0 却列表空 = 最热链路空成功，勿误报「暂无」
                         AppText(
-                            text = if (replyCount > 0) {
-                                "评论暂时无法加载，可切换「最新」或稍后重试"
-                            } else {
-                                "暂无评论"
-                            },
+                            text = "暂无评论",
                             color = commentAppearance.secondaryTextColor
                         )
                     }
@@ -1316,6 +1326,10 @@ internal fun VideoCommentTab(
                     ) {
                         when {
                             isRepliesLoading -> AdaptiveLoadingIndicator()
+                            repliesError != null -> com.android.purebilibili.feature.video.ui.components.CommentLoadError(
+                                message = repliesError,
+                                onRetry = onRetryReplies
+                            )
                             isRepliesEnd -> {
                                 AppText("—— end ——", color = commentAppearance.secondaryTextColor, fontSize = 12.sp)
                             }
@@ -1379,6 +1393,8 @@ internal fun LandscapeCommentPanel(
     onSubReplyClick: (ReplyItem, Long) -> Unit,
     onCommentReplyClick: (ReplyItem) -> Unit,
     onLoadMoreReplies: () -> Unit,
+    repliesError: String? = null,
+    onRetryReplies: () -> Unit = {},
     onDeleteComment: (Long) -> Unit,
     onDissolveStart: (Long) -> Unit,
     onCommentLike: (Long) -> Unit,
@@ -1453,6 +1469,8 @@ internal fun LandscapeCommentPanel(
                         onSubReplyClick = onSubReplyClick,
                         onCommentReplyClick = onCommentReplyClick,
                         onLoadMoreReplies = onLoadMoreReplies,
+                        repliesError = repliesError,
+                        onRetryReplies = onRetryReplies,
                         onImagePreview = { images, index, rect, textContent ->
                             previewImages = images
                             previewInitialIndex = index

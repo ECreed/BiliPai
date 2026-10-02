@@ -316,7 +316,9 @@ object CommentRepository {
             page = page,
             ps = ps,
             mode = mode,
-            paginationOffset = paginationOffset
+            paginationOffset = paginationOffset,
+            // IP 属地是可选信息；不要丢弃已成功的评论，再依赖另一条可能被限流的接口。
+            fallbackOnMissingLocation = false
         )
     }
 
@@ -457,6 +459,7 @@ object CommentRepository {
                 Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             android.util.Log.e("CommentRepo", " getComments exception: oid=$oid, type=$type, ${e.message}", e)
             Result.failure(e)
         }

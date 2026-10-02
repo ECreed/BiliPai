@@ -192,8 +192,14 @@ internal fun shouldDismissVideoCommentSheetHostOnBackdropTap(
 }
 
 internal fun shouldInterceptVideoCommentSheetHostBackdropTap(
-    mainSheetVisible: Boolean
-): Boolean = mainSheetVisible
+    mainSheetVisible: Boolean,
+    hostContent: VideoCommentSheetHostContent = VideoCommentSheetHostContent.MAIN_LIST,
+    topReservedPx: Int = 0
+): Boolean {
+    // 楼中楼留出的顶部是可操作的播放器，不是点击关闭的遮罩。
+    return mainSheetVisible &&
+        !(hostContent == VideoCommentSheetHostContent.THREAD_DETAIL && topReservedPx > 0)
+}
 
 internal fun shouldHandleVideoCommentSheetVerticalDrag(
     dragAmountPx: Float,
@@ -295,7 +301,7 @@ fun VideoCommentSheetHost(
      * 覆盖全屏 scrim 的峰值透明度。
      *
      * 详情页楼中楼（嵌入呈现）场景传入 0f：打开子评论时不再盖住播放器上方的阴影，
-     * 但 backdrop 点击拦截仍由 [mainSheetVisible] 控制，点背景关闭行为不受影响。
+     * 顶部预留播放器区域不拦截点击，关闭使用楼中楼返回/关闭按钮。
      */
     maxScrimAlphaOverride: Float? = null,
     onMainSheetVisibilityProgressChange: (Float) -> Unit = {},
@@ -558,7 +564,9 @@ fun VideoCommentSheetHost(
         exit = motionSpec.scrimExit
     ) {
         val interceptBackdropTap = shouldInterceptVideoCommentSheetHostBackdropTap(
-            mainSheetVisible = mainSheetVisible
+            mainSheetVisible = mainSheetVisible,
+            hostContent = hostContent,
+            topReservedPx = topReservedPx
         )
         BoxWithConstraints(
             modifier = Modifier
@@ -889,8 +897,14 @@ internal fun VideoCommentMainList(
                     }
 
                     item {
-                        if (!state.isRepliesEnd) {
-                            LaunchedEffect(Unit) {
+                        val loadError = state.repliesError
+                        if (loadError != null) {
+                            CommentLoadError(
+                                message = loadError,
+                                onRetry = viewModel::retryComments
+                            )
+                        } else if (!state.isRepliesEnd) {
+                            LaunchedEffect(state.nextPage) {
                                 viewModel.loadComments()
                             }
                             LoadingFooter()
