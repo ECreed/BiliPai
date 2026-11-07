@@ -1073,6 +1073,13 @@ internal fun VideoDetailScreenStateHolder(
         userRequestedFullscreen = userRequestedFullscreen,
         isInMultiWindowMode = isActivityInMultiWindowMode
     )
+    // 面板、视频画面和控制栏必须用同一个可见状态，楼中楼同样需要预留宽度。
+    val showLandscapeComments = isFullscreenMode && uiState is VideoPlaybackUiState.Success &&
+        shouldShowLandscapeVideoComments(landscapeCommentPanelVisible, subReplyState.visible)
+    val toggleLandscapeComments: () -> Unit = {
+        if (showLandscapeComments) commentViewModel.closeSubReply()
+        landscapeCommentPanelVisible = !showLandscapeComments
+    }
     ManualFullscreenRequestLifecycleEffect(
         manualFullscreenRequested = userRequestedFullscreen,
         isFullscreenMode = isFullscreenMode,
@@ -2972,10 +2979,8 @@ internal fun VideoDetailScreenStateHolder(
                     externalPlaylistSource == ExternalPlaylistSource.FAVORITE &&
                     playlistItems.size > 1,
                 onFavoritePlaylistClick = { showExternalPlaylistQueueSheet = true },
-                onLandscapeCommentClick = {
-                    landscapeCommentPanelVisible = !landscapeCommentPanelVisible
-                },
-                landscapeCommentPanelVisible = landscapeCommentPanelVisible,
+                onLandscapeCommentClick = toggleLandscapeComments,
+                landscapeCommentPanelVisible = showLandscapeComments,
                 landscapeCommentPanelOnLeft = landscapeCommentPanelOnLeft,
             ),
         )
@@ -3008,7 +3013,7 @@ internal fun VideoDetailScreenStateHolder(
                         )
                     )
                     val success = uiState as? VideoPlaybackUiState.Success
-                    if (shouldShowLandscapeVideoComments(landscapeCommentPanelVisible, subReplyState.visible) && success != null) {
+                    if (showLandscapeComments && success != null) {
                         LandscapeCommentPanel(
                             info = success.info, listState = commentListState,
                             replies = commentState.replies, replyCount = commentState.replyCount,
@@ -3045,6 +3050,8 @@ internal fun VideoDetailScreenStateHolder(
                                     VideoInlineSubReplyDetailContent(
                                         state = subReplyState,
                                         handleSystemBack = false,
+                                        onSwitchSide = { landscapeCommentPanelOnLeft = !landscapeCommentPanelOnLeft },
+                                        isOnLeft = landscapeCommentPanelOnLeft,
                                         commentState = commentState,
                                         emoteMap = success.emoteMap,
                                         maxTimestampMs = success.videoDurationMs.takeIf { it > 0L },
@@ -3093,10 +3100,8 @@ internal fun VideoDetailScreenStateHolder(
                     onHomeClick = {
                         handleTopBarAction(resolveVideoDetailTopBarAction(isHomeButton = true))
                     },
-                    onLandscapeCommentClick = {
-                        landscapeCommentPanelVisible = !landscapeCommentPanelVisible
-                    },
-                    landscapeCommentPanelVisible = landscapeCommentPanelVisible,
+                    onLandscapeCommentClick = toggleLandscapeComments,
+                    landscapeCommentPanelVisible = showLandscapeComments,
                     landscapeCommentPanelOnLeft = landscapeCommentPanelOnLeft,
                     onDanmakuInputClick = { viewModel.showDanmakuSendDialog() },
                     danmakuComposerVisible = showDanmakuDialog && useInlineDanmakuComposer,
@@ -3238,7 +3243,7 @@ internal fun VideoDetailScreenStateHolder(
                         onSubtitleTrackSelected = viewModel::selectSubtitleTrack
                     )
                     val success = uiState as? VideoPlaybackUiState.Success
-                    if (shouldShowLandscapeVideoComments(landscapeCommentPanelVisible, subReplyState.visible) && success != null) {
+                    if (showLandscapeComments && success != null) {
                         LandscapeCommentPanel(
                             info = success.info,
                             listState = commentListState,
@@ -3284,6 +3289,8 @@ internal fun VideoDetailScreenStateHolder(
                                     VideoInlineSubReplyDetailContent(
                                         state = subReplyState,
                                         handleSystemBack = false,
+                                        onSwitchSide = { landscapeCommentPanelOnLeft = !landscapeCommentPanelOnLeft },
+                                        isOnLeft = landscapeCommentPanelOnLeft,
                                         commentState = commentState,
                                         emoteMap = success.emoteMap,
                                         maxTimestampMs = success.videoDurationMs.takeIf { it > 0L },

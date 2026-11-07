@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.appendInlineContent
@@ -417,6 +418,8 @@ internal fun VideoInlineSubReplyDetailContent(
     showIdentityDecorations: Boolean,
     onAvatarClick: (String) -> Unit,
     handleSystemBack: Boolean = true,
+    onSwitchSide: (() -> Unit)? = null,
+    isOnLeft: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val rootReply = state.rootReply
@@ -459,6 +462,17 @@ internal fun VideoInlineSubReplyDetailContent(
         onAvatarClick = onAvatarClick,
         maxTimestampMs = maxTimestampMs,
         targetReplyId = state.targetReplyId,
+        headerActions = {
+            if (onSwitchSide != null) {
+                AppIconButton(onClick = onSwitchSide, modifier = Modifier.size(48.dp)) {
+                    AppIcon(
+                        imageVector = Icons.Outlined.SwapHoriz,
+                        contentDescription = if (isOnLeft) "移至右侧" else "移至左侧",
+                        tint = rememberVideoCommentAppearance().primaryTextColor
+                    )
+                }
+            }
+        },
         modifier = modifier,
     )
 }
@@ -497,6 +511,7 @@ internal fun SubReplyDetailContent(
     maxTimestampMs: Long? = null,
     remoteReplyCount: Int = 0,
     targetReplyId: Long = 0,
+    headerActions: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val layoutPolicy = remember {
@@ -693,6 +708,7 @@ internal fun SubReplyDetailContent(
                     color = appearance.primaryTextColor
                 )
                 Spacer(modifier = Modifier.weight(1f))
+                headerActions()
                 AppIconButton(
                     onClick = onDismiss,
                     modifier = Modifier.testTag(SUB_REPLY_DETAIL_CLOSE_TAG)

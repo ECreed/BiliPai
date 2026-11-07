@@ -12,6 +12,20 @@ import kotlin.test.assertTrue
 class VideoDetailLayoutModePolicyTest {
 
     @Test
+    fun nestedCommentPaneReservesTheSameWidthAsMainComments() {
+        val shown = shouldShowLandscapeVideoComments(panelRequested = false, subReplyVisible = true)
+        assertEquals(348, com.android.purebilibili.feature.video.ui.overlay.resolveLandscapeEndDrawerReservedWidthDp(
+            drawerVisible = shown, isFullscreen = true, screenWidthDp = 827
+        ))
+        val source = java.io.File(
+            "src/main/java/com/android/purebilibili/feature/video/screen/VideoDetailScreenStateHolder.kt"
+        ).readText()
+        // 两条播放器渲染路径都必须接收面板真正的可见状态，不能只传一级评论开关。
+        assertEquals(2, Regex("landscapeCommentPanelVisible = showLandscapeComments,").findAll(source).count())
+        assertEquals(2, Regex("if \\(showLandscapeComments && success != null\\)").findAll(source).count())
+    }
+
+    @Test
     fun commentThreadMovesToSidePanelWithoutClosingDuringFullscreen() {
         assertEquals(false, shouldShowDetachedVideoCommentThreadHost(false, isFullscreenMode = true))
         assertEquals(true, shouldShowLandscapeVideoComments(panelRequested = false, subReplyVisible = true))

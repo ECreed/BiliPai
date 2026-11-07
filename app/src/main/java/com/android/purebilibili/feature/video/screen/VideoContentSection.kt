@@ -1429,23 +1429,25 @@ internal fun LandscapeCommentPanel(
             color = MaterialTheme.colorScheme.surface,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AppText("评论 $replyCount", style = MaterialTheme.typography.titleMedium)
-                    CommentSortFilterBar(
-                        sortMode = sortMode,
-                        onSortModeChange = onSortModeChange,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    AppTextButton(onClick = onSwitchSide) { AppText(if (isOnLeft) "移至右侧" else "移至左侧") }
-                    AppTextButton(onClick = requestDismiss) { AppText("关闭") }
+                // 楼中楼有独立标题、换边和关闭按钮，不叠加一级评论的排序/标题栏。
+                if (threadContent == null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CommentSortHeader(
+                            count = replyCount,
+                            sortMode = sortMode,
+                            onSortModeChange = onSortModeChange,
+                            modifier = Modifier.weight(1f),
+                        )
+                        AppTextButton(onClick = onSwitchSide) { AppText(if (isOnLeft) "移至右侧" else "移至左侧") }
+                        AppTextButton(onClick = requestDismiss) { AppText("关闭") }
+                    }
+                    AppHorizontalDivider(color = commentAppearance.secondaryTextColor.copy(alpha = 0.18f))
                 }
-                AppHorizontalDivider(color = commentAppearance.secondaryTextColor.copy(alpha = 0.18f))
                 if (threadContent != null) {
                     threadContent { images, index, rect, textContent ->
                         previewImages = images
