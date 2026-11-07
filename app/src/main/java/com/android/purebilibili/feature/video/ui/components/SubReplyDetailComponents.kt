@@ -416,12 +416,13 @@ internal fun VideoInlineSubReplyDetailContent(
     onUrlClick: (String) -> Unit,
     showIdentityDecorations: Boolean,
     onAvatarClick: (String) -> Unit,
+    handleSystemBack: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val rootReply = state.rootReply
     if (!state.visible || rootReply == null) return
 
-    BackHandler(enabled = true) {
+    BackHandler(enabled = handleSystemBack) {
         onDismiss()
     }
 

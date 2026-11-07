@@ -8,6 +8,16 @@ import kotlin.test.assertTrue
 class ContinuousPlayerTransitionPolicyTest {
 
     @Test
+    fun explicitExitAlwaysRequestsPortraitEvenWhenBackIsRepeatedDuringRotation() {
+        for (phase in ContinuousPlayerTransitionPhase.entries) {
+            val exit = reduceContinuousPlayerTransition(phase, ContinuousPlayerTransitionEvent.ExitFullscreen)
+            assertEquals(ContinuousPlayerTransitionPhase.AwaitingPortrait, exit.phase)
+            assertEquals(ContinuousPlayerOrientationRequest.Portrait, exit.orientationRequest)
+            assertEquals(exit, reduceContinuousPlayerTransition(exit.phase, ContinuousPlayerTransitionEvent.ExitFullscreen))
+        }
+    }
+
+    @Test
     fun earlyFullscreenWaitsForEntryButFullscreenExitDoesNot() {
         assertEquals(true, shouldDeferFullscreenUntilEntrySettles(false, false))
         assertEquals(false, shouldDeferFullscreenUntilEntrySettles(true, false))

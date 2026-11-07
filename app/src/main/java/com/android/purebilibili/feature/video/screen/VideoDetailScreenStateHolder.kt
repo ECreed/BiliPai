@@ -1083,6 +1083,15 @@ internal fun VideoDetailScreenStateHolder(
             preserveCurrentFrameOnFullscreenChange = false
         }
     }
+    val fullscreenQualitySubject = (uiState as? VideoPlaybackUiState.Success)?.let {
+        "${it.info.bvid}:${it.info.cid}:${it.currentAudioLang.orEmpty()}"
+    }
+    // 同时覆盖先进入全屏后才加载成功的情况；不随画质/进度更新重复发请求。
+    LaunchedEffect(isFullscreenMode, fullscreenQualitySubject) {
+        if (isFullscreenMode && fullscreenQualitySubject != null) {
+            viewModel.applyFullscreenQualityPreference()
+        }
+    }
     var previousPipMode by remember { mutableStateOf(isInPipMode) }
     LaunchedEffect(isInPipMode) { presentationState.syncPipMode(isInPipMode) }
     LaunchedEffect(isPipMode, subReplyState.visible) {
@@ -2226,9 +2235,16 @@ internal fun VideoDetailScreenStateHolder(
 
     // 同一方向稳定一段时间再旋转；角度离开候选区会取消等待。
     // 使用计时协程而非计数传感器事件，静止后不再回调也能正常进入全屏。
-    LaunchedEffect(phoneAutoRotateCandidate) {
+    LaunchedEffect(phoneAutoRotateCandidate, manualPortraitHoldActive) {
         val candidate = phoneAutoRotateCandidate ?: return@LaunchedEffect
         val hostActivity = activity ?: return@LaunchedEffect
+        if (manualPortraitHoldActive) {
+            // 用户退出后，即使手机仍横放也保持竖屏；真正回正并稳定后才重新允许重力全屏。
+            kotlinx.coroutines.delay(PHONE_AUTO_ROTATE_STABILITY_MS)
+            manualPortraitHoldActive = false
+            phoneAutoRotateCandidate = null
+            return@LaunchedEffect
+        }
         if (hostActivity.requestedOrientation == candidate) return@LaunchedEffect
         kotlinx.coroutines.delay(PHONE_AUTO_ROTATE_STABILITY_MS)
         val nowMs = SystemClock.elapsedRealtime()
@@ -2299,10 +2315,9 @@ internal fun VideoDetailScreenStateHolder(
         val orientationListener = object : OrientationEventListener(context) {
             override fun onOrientationChanged(orientation: Int) {
                 if (manualPortraitHoldActive) {
-                    phoneAutoRotateCandidate = null
-                    if (shouldReleasePhoneManualPortraitHold(orientation)) {
-                        manualPortraitHoldActive = false
-                    }
+                    phoneAutoRotateCandidate = if (shouldReleasePhoneManualPortraitHold(orientation)) {
+                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    } else null
                     return
                 }
                 val isCurrentlyLandscape =
@@ -2647,8 +2662,8 @@ internal fun VideoDetailScreenStateHolder(
     //  弹幕加载逻辑已移至 VideoPlayerState 内部处理
     // 避免在此处重复消耗 InputStream
 
-    // 辅助函数：切换全屏状态
-    val performToggleFullscreen = {
+    // 返回退出和按钮切换共用画面保护，但返回绝不能反向触发进入全屏。
+    fun performFullscreenChange(exitOnly: Boolean = false) {
         val activity = context.findActivity()
         val currentPositionMs = playerState.player.currentPosition.coerceAtLeast(0L)
         val shouldPreserveCurrentFrame = activity != null &&
@@ -2661,7 +2676,23 @@ internal fun VideoDetailScreenStateHolder(
         } else {
             pendingFullscreenPositionRestoreMs = -1L
         }
-        if (continuousFullscreenTransitionEnabled) {
+        if (exitOnly || isFullscreenMode) {
+            phoneAutoRotateCandidate = null
+            userRequestedFullscreen = false
+            if (!isActivityInMultiWindowMode && windowSizeClass.isCompactDevice) {
+                manualPortraitHoldActive = true
+                if (continuousFullscreenTransitionEnabled) {
+                    applyContinuousPlayerDecision(
+                        reduceContinuousPlayerTransition(
+                            continuousPlayerPhase,
+                            ContinuousPlayerTransitionEvent.ExitFullscreen
+                        )
+                    )
+                } else {
+                    activity?.applyPlayerRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+                }
+            }
+        } else if (continuousFullscreenTransitionEnabled) {
             applyContinuousPlayerDecision(
                 reduceContinuousPlayerTransition(
                     phase = continuousPlayerPhase,
@@ -2691,14 +2722,18 @@ internal fun VideoDetailScreenStateHolder(
             pendingEntryFullscreen = !pendingEntryFullscreen
         } else {
             pendingEntryFullscreen = false
-            performToggleFullscreen()
+            performFullscreenChange()
         }
     }
     LaunchedEffect(entryTransitionFinished, pendingEntryFullscreen, isVisible, isFullscreenMode) {
         if (pendingEntryFullscreen && entryTransitionFinished && isVisible) {
             pendingEntryFullscreen = false
-            if (!isFullscreenMode) performToggleFullscreen()
+            if (!isFullscreenMode) performFullscreenChange()
         }
+    }
+    val exitLandscapeFullscreen: () -> Unit = {
+        pendingEntryFullscreen = false
+        performFullscreenChange(exitOnly = true)
     }
 
     val localBackTarget = resolveVideoDetailLocalBackTarget(
@@ -2712,7 +2747,7 @@ internal fun VideoDetailScreenStateHolder(
         onBackCompleted = {
             when (localBackTarget) {
                 VideoDetailLocalBackTarget.EXIT_PORTRAIT_FULLSCREEN -> presentationState.setPortraitFullscreen(false)
-                VideoDetailLocalBackTarget.EXIT_LANDSCAPE_FULLSCREEN -> toggleFullscreen()
+                VideoDetailLocalBackTarget.EXIT_LANDSCAPE_FULLSCREEN -> exitLandscapeFullscreen()
                 VideoDetailLocalBackTarget.NAVIGATE_BACK -> Unit
             }
         },
@@ -2850,7 +2885,7 @@ internal fun VideoDetailScreenStateHolder(
             onToggleFullscreen = { toggleFullscreen() },
             playbackActions = playbackActions,
             onDoubleTapLike = engagementViewModel::toggleLike,
-            onBack = if (layout.isFullscreen) ({ toggleFullscreen() }) else handleBack,
+            onBack = if (layout.isFullscreen) exitLandscapeFullscreen else handleBack,
             onHomeClick = {
                 handleTopBarAction(resolveVideoDetailTopBarAction(isHomeButton = true))
             },
@@ -2973,7 +3008,7 @@ internal fun VideoDetailScreenStateHolder(
                         )
                     )
                     val success = uiState as? VideoPlaybackUiState.Success
-                    if (landscapeCommentPanelVisible && success != null) {
+                    if (shouldShowLandscapeVideoComments(landscapeCommentPanelVisible, subReplyState.visible) && success != null) {
                         LandscapeCommentPanel(
                             info = success.info, listState = commentListState,
                             replies = commentState.replies, replyCount = commentState.replyCount,
@@ -3009,6 +3044,7 @@ internal fun VideoDetailScreenStateHolder(
                                 { onImagePreview ->
                                     VideoInlineSubReplyDetailContent(
                                         state = subReplyState,
+                                        handleSystemBack = false,
                                         commentState = commentState,
                                         emoteMap = success.emoteMap,
                                         maxTimestampMs = success.videoDurationMs.takeIf { it > 0L },
@@ -3017,7 +3053,6 @@ internal fun VideoDetailScreenStateHolder(
                                         onRootCommentClick = playbackActions.openRootCommentComposer,
                                         onTimestampClick = { positionMs ->
                                             seekPlayerFromUserAction(playerState.player, positionMs)
-                                            commentActions.closeSubReply()
                                         },
                                         onImagePreview = onImagePreview,
                                         onReplyClick = playbackActions.replyTo,
@@ -3054,7 +3089,7 @@ internal fun VideoDetailScreenStateHolder(
                     transitionEnabled = detailChildTransitionEnabled,
                     onToggleFullscreen = { toggleFullscreen() },
                     onQualityChange = { qid -> viewModel.changeQuality(qid) },
-                    onBack = { toggleFullscreen() },
+                    onBack = exitLandscapeFullscreen,
                     onHomeClick = {
                         handleTopBarAction(resolveVideoDetailTopBarAction(isHomeButton = true))
                     },
@@ -3203,7 +3238,7 @@ internal fun VideoDetailScreenStateHolder(
                         onSubtitleTrackSelected = viewModel::selectSubtitleTrack
                     )
                     val success = uiState as? VideoPlaybackUiState.Success
-                    if (landscapeCommentPanelVisible && success != null) {
+                    if (shouldShowLandscapeVideoComments(landscapeCommentPanelVisible, subReplyState.visible) && success != null) {
                         LandscapeCommentPanel(
                             info = success.info,
                             listState = commentListState,
@@ -3248,6 +3283,7 @@ internal fun VideoDetailScreenStateHolder(
                                 { onImagePreview ->
                                     VideoInlineSubReplyDetailContent(
                                         state = subReplyState,
+                                        handleSystemBack = false,
                                         commentState = commentState,
                                         emoteMap = success.emoteMap,
                                         maxTimestampMs = success.videoDurationMs.takeIf { it > 0L },
@@ -3256,7 +3292,6 @@ internal fun VideoDetailScreenStateHolder(
                                         onRootCommentClick = playbackActions.openRootCommentComposer,
                                         onTimestampClick = { positionMs ->
                                             seekPlayerFromUserAction(playerState.player, positionMs)
-                                            commentActions.closeSubReply()
                                         },
                                         onImagePreview = onImagePreview,
                                         onReplyClick = playbackActions.replyTo,
@@ -4617,8 +4652,10 @@ internal fun VideoDetailScreenStateHolder(
 
         val successState = uiState as? VideoPlaybackUiState.Success
         DetachedVideoCommentThreadHost(
-            visible = shouldShowDetachedVideoCommentThreadHost(useTabletLayout = useTabletLayout) &&
-                !(isFullscreenMode && landscapeCommentPanelVisible),
+            visible = shouldShowDetachedVideoCommentThreadHost(
+                useTabletLayout = useTabletLayout,
+                isFullscreenMode = isFullscreenMode
+            ),
             successState = successState,
             commentState = commentState,
             commentViewModel = commentViewModel,
@@ -4638,7 +4675,6 @@ internal fun VideoDetailScreenStateHolder(
             topReservedPx = danmakuDialogTopReservePx,
             onTimestampClick = { positionMs ->
                 seekPlayerFromUserAction(playerState.player, positionMs)
-                commentViewModel.closeSubReply()
             },
             onBackToTop = {
                 // 评论区下滑缩小播放器后,一键回顶同时恢复播放器全尺寸。

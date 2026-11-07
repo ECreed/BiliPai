@@ -1286,6 +1286,7 @@ internal fun resolveSubtitleTrackLoadDecision(
 
 internal enum class QualityChangeReason {
     USER_EXPLICIT,
+    FULLSCREEN_PREFERENCE,
     INITIAL_AUTO_UPGRADE
 }
 
@@ -1322,6 +1323,7 @@ class VideoPlaybackViewModel : ViewModel() {
     private val explicitQualitySelectionKeys = mutableSetOf<String>()
     private var explicitQualitySelectionGeneration: Long = 0L
     private var hdrAutoUpgradeJob: Job? = null
+    private var qualitySwitchJob: Job? = null
 
     //  插件系统（替代旧的SponsorBlockUseCase）
     private var pluginCheckJob: Job? = null
@@ -2971,6 +2973,7 @@ class VideoPlaybackViewModel : ViewModel() {
             miniPlayerCid = miniPlayerManager?.currentCid ?: 0L,
             miniPlayerActive = miniPlayerManager?.isActive == true
         )
+        if (!isSamePlaybackRequest || playbackRequest.force) qualitySwitchJob?.cancel()
         Logger.d(
             "PlayerVM",
             "SUB_DBG same-playback check: request=${playbackRequest.bvid}/${playbackRequest.cid}, current=$currentBvid/$currentCid, mini=${miniPlayerManager?.currentBvid}/${miniPlayerManager?.currentCid}, miniActive=${miniPlayerManager?.isActive == true}, result=$isSamePlaybackRequest"
@@ -6961,25 +6964,74 @@ class VideoPlaybackViewModel : ViewModel() {
         }
     }
     
-    fun changeQuality(qualityId: Int) {
+    fun applyFullscreenQualityPreference() {
+        val current = _uiState.value as? VideoPlaybackUiState.Success ?: return
+        val context = appContext ?: return
+        if (current.isQualitySwitching) return
+        val isHdrSupported = com.android.purebilibili.core.util.MediaUtils.isHdrSupported(context)
+        val isDolbySupported = com.android.purebilibili.core.util.MediaUtils.isDolbyVisionSupported(context)
+        val storedQuality = NetworkUtils.getDefaultQualityId(context)
+        val autoHighest = com.android.purebilibili.core.store.SettingsManager.getAutoHighestQualitySync(context)
+        val preferredQuality = if (autoHighest || storedQuality >= 127) {
+            playbackUseCase.resolveAutoHighestTargetQuality(
+                acceptQualities = current.qualityIds,
+                isLoggedIn = current.isLoggedIn,
+                isVip = current.isVip,
+                isHdrSupported = isHdrSupported,
+                isDolbyVisionSupported = isDolbySupported
+            )
+        } else storedQuality
+        val explicitQuality = current.playbackQualityMode.lockedQualityId.takeIf {
+            hasExplicitQualitySelectionForPlayback(
+                buildPremiumAutoUpgradePlaybackKey(currentBvid, currentCid, current.currentAudioLang),
+                explicitQualitySelectionKeys
+            )
+        }
+        val permittedQualities = current.qualityIds.filter { quality ->
+            qualityManager.checkQualityPermission(
+                qualityId = quality,
+                isLoggedIn = current.isLoggedIn,
+                isVip = current.isVip,
+                isHdrSupported = isHdrSupported,
+                isDolbyVisionSupported = isDolbySupported,
+                serverAdvertisedQualities = current.qualityIds
+            ) is QualityPermissionResult.Permitted
+        }
+        val target = resolveFullscreenQualityUpgrade(
+            currentQuality = current.currentQuality,
+            preferredQuality = preferredQuality,
+            availableQualities = permittedQualities,
+            explicitlySelectedQuality = explicitQuality,
+            dataSaverActive = com.android.purebilibili.core.store.SettingsManager.isDataSaverActive(context)
+        ) ?: return
+        Logger.d("PlayerVM", "PLAY_DIAG fullscreen_quality current=${current.currentQuality} target=$target")
+        changeQualityInternal(target, QualityChangeReason.FULLSCREEN_PREFERENCE)
+    }
+
+    fun changeQuality(qualityId: Int) = changeQualityInternal(qualityId, QualityChangeReason.USER_EXPLICIT)
+
+    private fun changeQualityInternal(qualityId: Int, reason: QualityChangeReason) {
         val current = _uiState.value as? VideoPlaybackUiState.Success ?: return
         if (current.isQualitySwitching) {
             toast("正在切换中...", PlayerToastPresentation.CenteredHighlight)
             return
         }
-        if (current.currentQuality == qualityId) {
-            toast("已是当前清晰度", PlayerToastPresentation.CenteredHighlight)
-            return
-        }
-
         // Cancel only the current playback's pending auto-upgrade. Other videos remain eligible.
-        explicitQualitySelectionKeys += buildPremiumAutoUpgradePlaybackKey(
-            currentBvid,
-            currentCid,
-            current.currentAudioLang
-        )
+        if (reason == QualityChangeReason.USER_EXPLICIT) {
+            explicitQualitySelectionKeys += buildPremiumAutoUpgradePlaybackKey(
+                currentBvid, currentCid, current.currentAudioLang
+            )
+        }
         explicitQualitySelectionGeneration++
         hdrAutoUpgradeJob?.cancel()
+        if (current.currentQuality == qualityId &&
+            (reason != QualityChangeReason.USER_EXPLICIT || current.playbackQualityMode.lockedQualityId == qualityId)
+        ) {
+            if (reason == QualityChangeReason.USER_EXPLICIT) {
+                toast("已是当前清晰度", PlayerToastPresentation.CenteredHighlight)
+            }
+            return
+        }
 
         val isHdrSupported = appContext?.let {
             com.android.purebilibili.core.util.MediaUtils.isHdrSupported(it)
@@ -7021,7 +7073,7 @@ class VideoPlaybackViewModel : ViewModel() {
                     isDolbyVisionSupported = isDolbyVisionSupported
                 )
                 if (fallbackQuality != current.currentQuality) {
-                    changeQuality(fallbackQuality)
+                    changeQualityInternal(fallbackQuality, reason)
                 }
                 return
             }
@@ -7045,7 +7097,7 @@ class VideoPlaybackViewModel : ViewModel() {
                     isDolbyVisionSupported = isDolbyVisionSupported
                 )
                 if (fallbackQuality != current.currentQuality && fallbackQuality != qualityId) {
-                    changeQuality(fallbackQuality)
+                    changeQualityInternal(fallbackQuality, reason)
                 }
                 return
             }
@@ -7083,7 +7135,7 @@ class VideoPlaybackViewModel : ViewModel() {
             pendingPlaybackTransitionPositionMs = transitionPositionMs
         )
         
-        viewModelScope.launch {
+        qualitySwitchJob = viewModelScope.launch {
             try {
                 val audioPref = current.requestedAudioQuality
                 val sessionBlockedCodecs = playbackSessionStore.state.value.blockedVideoCodecs
@@ -7160,7 +7212,7 @@ class VideoPlaybackViewModel : ViewModel() {
                             playWhenReady = playWhenReadyAfterSwitch,
                             playbackQualityMode = playbackQualityMode
                         ),
-                        reason = QualityChangeReason.USER_EXPLICIT,
+                        reason = reason,
                         cdnSelection = cdnSelection
                     )
                 } else {
@@ -7176,6 +7228,7 @@ class VideoPlaybackViewModel : ViewModel() {
                     )
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _uiState.value = current.copy(
                     isQualitySwitching = false,
                     requestedQuality = null,
@@ -7195,6 +7248,7 @@ class VideoPlaybackViewModel : ViewModel() {
         val current = _uiState.value as? VideoPlaybackUiState.Success ?: return
         val page = current.info.pages.getOrNull(pageIndex) ?: return
         if (page.cid == currentCid) { toast("\u5df2\u662f\u5f53\u524d\u5206P"); return }
+        qualitySwitchJob?.cancel()
         playbackCoordinator.dismissResumeSuggestion()
         subtitleLoadToken += 1
         val subtitleClearedState = clearTransientPlaybackPreviewData(clearSubtitleFields(current))
@@ -8649,7 +8703,8 @@ class VideoPlaybackViewModel : ViewModel() {
                 )
             }
 
-            QualityChangeReason.INITIAL_AUTO_UPGRADE -> {
+            QualityChangeReason.INITIAL_AUTO_UPGRADE,
+            QualityChangeReason.FULLSCREEN_PREFERENCE -> {
                 Logger.d(
                     "PlayerVM",
                     "PLAY_DIAG premium_upgrade_applied " +

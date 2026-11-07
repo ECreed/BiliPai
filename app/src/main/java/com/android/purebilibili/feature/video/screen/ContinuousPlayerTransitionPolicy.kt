@@ -16,6 +16,7 @@ internal enum class ContinuousPlayerOrientationRequest {
 
 internal sealed interface ContinuousPlayerTransitionEvent {
     data object Toggle : ContinuousPlayerTransitionEvent
+    data object ExitFullscreen : ContinuousPlayerTransitionEvent
     data object ExpansionFinished : ContinuousPlayerTransitionEvent
     data object CollapseFinished : ContinuousPlayerTransitionEvent
     data class OrientationChanged(val isLandscape: Boolean) : ContinuousPlayerTransitionEvent
@@ -48,6 +49,11 @@ internal fun reduceContinuousPlayerTransition(
     event: ContinuousPlayerTransitionEvent,
 ): ContinuousPlayerTransitionDecision {
     return when (event) {
+        // 返回是单向操作；连续返回或配置尚未切换时，不能被 Toggle 反向解释成进入横屏。
+        ContinuousPlayerTransitionEvent.ExitFullscreen -> ContinuousPlayerTransitionDecision(
+            phase = ContinuousPlayerTransitionPhase.AwaitingPortrait,
+            orientationRequest = ContinuousPlayerOrientationRequest.Portrait,
+        )
         ContinuousPlayerTransitionEvent.Toggle -> when (phase) {
             ContinuousPlayerTransitionPhase.Inline,
             ContinuousPlayerTransitionPhase.Collapsing -> ContinuousPlayerTransitionDecision(

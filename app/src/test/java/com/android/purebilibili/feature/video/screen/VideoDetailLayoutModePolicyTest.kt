@@ -12,6 +12,14 @@ import kotlin.test.assertTrue
 class VideoDetailLayoutModePolicyTest {
 
     @Test
+    fun commentThreadMovesToSidePanelWithoutClosingDuringFullscreen() {
+        assertEquals(false, shouldShowDetachedVideoCommentThreadHost(false, isFullscreenMode = true))
+        assertEquals(true, shouldShowLandscapeVideoComments(panelRequested = false, subReplyVisible = true))
+        assertEquals(true, shouldShowDetachedVideoCommentThreadHost(false, isFullscreenMode = false))
+        assertEquals(false, shouldShowLandscapeVideoComments(panelRequested = false, subReplyVisible = false))
+    }
+
+    @Test
     fun expanded_usesTabletLayout() {
         assertTrue(
             shouldUseTabletVideoLayout(

@@ -453,10 +453,16 @@ internal fun shouldRotateToPortraitOnSplitBack(
 }
 
 internal fun shouldShowDetachedVideoCommentThreadHost(
-    useTabletLayout: Boolean
+    useTabletLayout: Boolean,
+    isFullscreenMode: Boolean = false
 ): Boolean {
-    return !useTabletLayout
+    return !useTabletLayout && !isFullscreenMode
 }
+
+internal fun shouldShowLandscapeVideoComments(
+    panelRequested: Boolean,
+    subReplyVisible: Boolean
+): Boolean = panelRequested || subReplyVisible
 
 internal fun resolveVideoDetailCommentThreadHostMainSheetVisible(
     useEmbeddedPresentation: Boolean,
