@@ -82,6 +82,13 @@
 -keep class com.android.purebilibili.feature.video.screen.VideoDetailScreenKt { *; }
 -keep class com.android.purebilibili.feature.video.screen.VideoDetailScreenKt$* { *; }
 
+# The wide VideoContentSection composable also hits ART verification after R8
+# rewrites its arguments (PagerState register treated as int, Android phone dev APK).
+# Preserve only this entrypoint and its generated helper methods, not the whole package.
+-keepclassmembers,allowobfuscation class com.android.purebilibili.feature.video.screen.VideoContentSectionKt {
+    public static void VideoContentSection*(...);
+}
+
 # Release-only player overlay regressions are hard to diagnose because gestures
 # can keep working while Compose control layers stop rendering. Keep the
 # player section and overlay classes out of R8 optimization; this preserves
