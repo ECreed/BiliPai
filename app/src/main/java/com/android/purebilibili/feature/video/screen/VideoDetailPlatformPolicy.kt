@@ -694,24 +694,24 @@ internal fun resolvePhoneAutoRotateRequestedOrientation(
 }
 
 internal const val PHONE_AUTO_ROTATE_LANDSCAPE_SETTLE_MS = 500L
-internal const val PHONE_AUTO_ROTATE_STABILITY_MS = 700L
+internal const val PHONE_AUTO_ROTATE_STABILITY_MS = 250L
 
-internal fun resolvePhoneAutoRotateTargetToApply(
-    candidateOrientation: Int?,
+internal fun resolvePhoneAutoRotateDelayMs(
+    candidateOrientation: Int,
     lastLandscapeAppliedAtMs: Long?,
     nowMs: Long,
     landscapeSettleMs: Long = PHONE_AUTO_ROTATE_LANDSCAPE_SETTLE_MS
-): Int? {
-    if (candidateOrientation == null) return null
-    // 系统配置切到横屏有延迟；按最近一次横屏写入时间保护，避免刚进横屏又被残留竖屏角度拉回。
-    if (
+): Long {
+    // 防止刚请求横屏就被残留角度拉回。方向持续稳定时，等保护期结束后仍要应用。
+    val landscapeSettleRemainingMs = if (
         candidateOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT &&
-        lastLandscapeAppliedAtMs != null &&
-        nowMs - lastLandscapeAppliedAtMs < landscapeSettleMs
+        lastLandscapeAppliedAtMs != null
     ) {
-        return null
+        landscapeSettleMs - (nowMs - lastLandscapeAppliedAtMs)
+    } else {
+        0L
     }
-    return candidateOrientation
+    return maxOf(PHONE_AUTO_ROTATE_STABILITY_MS, landscapeSettleRemainingMs)
 }
 
 private fun resolveCurrentExactLandscapeOrientation(currentRequestedOrientation: Int?): Int? {

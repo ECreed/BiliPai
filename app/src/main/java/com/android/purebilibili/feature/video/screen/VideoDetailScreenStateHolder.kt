@@ -131,6 +131,7 @@ import com.android.purebilibili.feature.video.ui.components.PagesSelector
 // Imports for moved classes
 import com.android.purebilibili.feature.video.viewmodel.VideoPlaybackViewModel
 import com.android.purebilibili.feature.video.viewmodel.VideoPlaybackUiState
+import com.android.purebilibili.feature.video.viewmodel.qualityPlaybackKey
 import com.android.purebilibili.feature.video.viewmodel.VideoComposerViewModel
 import com.android.purebilibili.feature.video.viewmodel.VideoEngagementViewModel
 import com.android.purebilibili.feature.video.viewmodel.VideoEngagementEvent
@@ -177,6 +178,7 @@ import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
 import io.github.alexzhirkevich.cupertino.icons.outlined.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 //  共享元素过渡
@@ -253,7 +255,7 @@ import kotlin.math.roundToInt
 private val commentBackToTopRestoreFlow =
     kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-private const val CONTINUOUS_PLAYER_MORPH_DURATION_MILLIS = 280
+private const val CONTINUOUS_PLAYER_MORPH_DURATION_MILLIS = 140
 
 private const val VIDEO_DETAIL_COLLAPSE_SIGNAL_IDLE_TIMEOUT_MS = 120L
 
@@ -1090,13 +1092,11 @@ internal fun VideoDetailScreenStateHolder(
             preserveCurrentFrameOnFullscreenChange = false
         }
     }
-    val fullscreenQualitySubject = (uiState as? VideoPlaybackUiState.Success)?.let {
-        "${it.info.bvid}:${it.info.cid}:${it.currentAudioLang.orEmpty()}"
-    }
-    // 同时覆盖先进入全屏后才加载成功的情况；不随画质/进度更新重复发请求。
-    LaunchedEffect(isFullscreenMode, fullscreenQualitySubject) {
-        if (isFullscreenMode && fullscreenQualitySubject != null) {
-            viewModel.applyFullscreenQualityPreference()
+    val fullscreenQualitySubject = (uiState as? VideoPlaybackUiState.Success)?.qualityPlaybackKey()
+    // 每次进全屏针对当前分 P / 音轨补选一次，必要时等正在进行的切换完成。
+    LaunchedEffect(isVisible, isFullscreenMode, fullscreenQualitySubject) {
+        if (isVisible && isFullscreenMode && fullscreenQualitySubject != null) {
+            viewModel.applyFullscreenQualityPreference(fullscreenQualitySubject)
         }
     }
     var previousPipMode by remember { mutableStateOf(isInPipMode) }
@@ -2239,6 +2239,7 @@ internal fun VideoDetailScreenStateHolder(
     }
     var lastPhoneAutoRotateLandscapeAppliedAtMs by remember { mutableStateOf<Long?>(null) }
     var phoneAutoRotateCandidate by remember { mutableStateOf<Int?>(null) }
+    val latestEntryTransitionFinished by rememberUpdatedState(entryTransitionFinished)
 
     // 同一方向稳定一段时间再旋转；角度离开候选区会取消等待。
     // 使用计时协程而非计数传感器事件，静止后不再回调也能正常进入全屏。
@@ -2248,21 +2249,28 @@ internal fun VideoDetailScreenStateHolder(
         if (manualPortraitHoldActive) {
             // 用户退出后，即使手机仍横放也保持竖屏；真正回正并稳定后才重新允许重力全屏。
             kotlinx.coroutines.delay(PHONE_AUTO_ROTATE_STABILITY_MS)
+            if (phoneAutoRotateCandidate != candidate || !manualPortraitHoldActive) return@LaunchedEffect
             manualPortraitHoldActive = false
             phoneAutoRotateCandidate = null
             return@LaunchedEffect
         }
         if (hostActivity.requestedOrientation == candidate) return@LaunchedEffect
-        kotlinx.coroutines.delay(PHONE_AUTO_ROTATE_STABILITY_MS)
-        val nowMs = SystemClock.elapsedRealtime()
-        val targetToApply = resolvePhoneAutoRotateTargetToApply(
-            candidateOrientation = candidate,
-            lastLandscapeAppliedAtMs = lastPhoneAutoRotateLandscapeAppliedAtMs,
-            nowMs = nowMs
-        ) ?: return@LaunchedEffect
-        hostActivity.applyPlayerRequestedOrientation(targetToApply)
-        lastPhoneAutoRotateLandscapeAppliedAtMs =
-            if (isLandscapeRequestedOrientation(targetToApply)) nowMs else null
+        kotlinx.coroutines.delay(
+            resolvePhoneAutoRotateDelayMs(
+                candidateOrientation = candidate,
+                lastLandscapeAppliedAtMs = lastPhoneAutoRotateLandscapeAppliedAtMs,
+                nowMs = SystemClock.elapsedRealtime()
+            )
+        )
+        val isLandscapeCandidate = isLandscapeRequestedOrientation(candidate)
+        if (isLandscapeCandidate && !latestEntryTransitionFinished) {
+            snapshotFlow { latestEntryTransitionFinished }.first { it }
+        }
+        if (phoneAutoRotateCandidate != candidate || manualPortraitHoldActive) return@LaunchedEffect
+        if (hostActivity.applyPlayerRequestedOrientation(candidate)) {
+            lastPhoneAutoRotateLandscapeAppliedAtMs =
+                if (isLandscapeCandidate) SystemClock.elapsedRealtime() else null
+        }
     }
 
     LaunchedEffect(

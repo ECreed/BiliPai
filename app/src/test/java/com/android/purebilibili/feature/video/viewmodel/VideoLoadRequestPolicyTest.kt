@@ -386,6 +386,12 @@ class VideoLoadRequestPolicyTest {
                 cdnSelectionChangedUrl = false
             )
         )
+        assertTrue(
+            shouldReplacePlaybackSourceForQualityChange(
+                reason = QualityChangeReason.FULLSCREEN_PREFERENCE,
+                cdnSelectionChangedUrl = false
+            )
+        )
         assertFalse(
             shouldReplacePlaybackSourceForQualityChange(
                 reason = QualityChangeReason.USER_EXPLICIT,

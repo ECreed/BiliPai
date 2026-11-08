@@ -534,12 +534,30 @@ class VideoLoadPolicyTest {
     }
 
     @Test
-    fun `only explicit premium requests use strict quality lookup`() {
-        assertTrue(isStrictPremiumQualityRequest(PlayUrlRequestKind.EXPLICIT, 125))
-        assertTrue(isStrictPremiumQualityRequest(PlayUrlRequestKind.EXPLICIT, 126))
-        assertTrue(isStrictPremiumQualityRequest(PlayUrlRequestKind.EXPLICIT, 127))
-        assertFalse(isStrictPremiumQualityRequest(PlayUrlRequestKind.EXPLICIT, 120))
-        assertFalse(isStrictPremiumQualityRequest(PlayUrlRequestKind.INITIAL, 125))
+    fun fullscreenUpgradeKeepsTheExactQualityAcrossSources() {
+        assertTrue(shouldRequestOnlyTargetQuality(PlayUrlRequestKind.EXPLICIT, 125))
+        assertTrue(shouldRequestOnlyTargetQuality(PlayUrlRequestKind.EXPLICIT, 126))
+        assertTrue(shouldRequestOnlyTargetQuality(PlayUrlRequestKind.EXPLICIT, 127))
+        assertFalse(shouldRequestOnlyTargetQuality(PlayUrlRequestKind.EXPLICIT, 120))
+        assertFalse(shouldRequestOnlyTargetQuality(PlayUrlRequestKind.INITIAL, 125))
+
+        assertTrue(shouldRequestOnlyTargetQuality(PlayUrlRequestKind.EXACT_UPGRADE, 116))
+        assertFalse(
+            shouldAcceptAppApiResultForTargetQuality(
+                requestKind = PlayUrlRequestKind.EXACT_UPGRADE,
+                targetQn = 116,
+                returnedQuality = 116,
+                dashVideoIds = listOf(80)
+            )
+        )
+        assertTrue(
+            shouldAcceptAppApiResultForTargetQuality(
+                requestKind = PlayUrlRequestKind.EXACT_UPGRADE,
+                targetQn = 116,
+                returnedQuality = 80,
+                dashVideoIds = listOf(116, 80)
+            )
+        )
     }
 
     @Test

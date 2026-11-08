@@ -1470,13 +1470,19 @@ object VideoRepository {
         throw Exception("Wbi Keys Error after $maxRetries attempts: ${lastError?.message}")
     }
 
-    suspend fun getPlayUrlData(bvid: String, cid: Long, qn: Int, audioLang: String? = null): PlayUrlData? = withContext(Dispatchers.IO) {
+    suspend fun getPlayUrlData(
+        bvid: String,
+        cid: Long,
+        qn: Int,
+        audioLang: String? = null,
+        requireExactQuality: Boolean = false
+    ): PlayUrlData? = withContext(Dispatchers.IO) {
         fetchPlayUrlRecursive(
             bvid = bvid,
             cid = cid,
             targetQn = qn,
             audioLang = audioLang,
-            requestKind = PlayUrlRequestKind.EXPLICIT
+            requestKind = if (requireExactQuality) PlayUrlRequestKind.EXACT_UPGRADE else PlayUrlRequestKind.EXPLICIT
         )?.data
     }
 
@@ -1595,7 +1601,7 @@ object VideoRepository {
         )
         com.android.purebilibili.core.util.Logger.d("VideoRepo", " fetchPlayUrlRecursive: bvid=$bvid, isLoggedIn=$isLoggedIn, targetQn=$targetQn, audioLang=$audioLang")
 
-        if (isStrictPremiumQualityRequest(requestKind, targetQn)) {
+        if (shouldRequestOnlyTargetQuality(requestKind, targetQn)) {
             return fetchDashWithFallback(
                 bvid = bvid,
                 cid = cid,
@@ -1645,9 +1651,9 @@ object VideoRepository {
             " [LoggedIn] DASH-first strategy, qn=$targetQn, directedTrafficMode=$directedTrafficMode"
         )
         
-        val strictPremiumRequest = isStrictPremiumQualityRequest(requestKind, targetQn)
-        // 手动高级画质只能请求精确档位；首次加载和普通档位仍保留快速降级。
-        val dashQualities = if (strictPremiumRequest) {
+        val onlyTargetQuality = shouldRequestOnlyTargetQuality(requestKind, targetQn)
+        // 全屏升档先通过各接口尝试同一档位，再由播放器决定下一档。
+        val dashQualities = if (onlyTargetQuality) {
             listOf(targetQn)
         } else {
             buildDashAttemptQualities(targetQn)
@@ -1776,7 +1782,7 @@ object VideoRepository {
             }
         }
 
-        if (strictPremiumRequest) {
+        if (onlyTargetQuality) {
             return null
         }
 

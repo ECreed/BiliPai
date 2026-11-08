@@ -873,7 +873,8 @@ class VideoPlaybackUseCase(
             com.android.purebilibili.core.util.MediaUtils.isDolbyAtmosAudioSupported(),
         isDolbyAudioSoftwareDecoded: Boolean =
             com.android.purebilibili.core.util.MediaUtils.isDolbySoftwareAudioDecoderRequired(),
-        playWhenReady: Boolean = true
+        playWhenReady: Boolean = true,
+        applyToPlayer: Boolean = true
     ): QualitySwitchResult? {
         if (cachedVideos.isEmpty()) {
             Logger.d("VideoPlaybackUseCase", " changeQualityFromCache: cache is EMPTY, returning null")
@@ -944,13 +945,15 @@ class VideoPlaybackUseCase(
             isDolbyAudioSupported = isDolbyAudioSupported
         )
         if (videoUrl.isNotEmpty()) {
-            playDashVideo(
-                videoUrl = videoUrl,
-                audioUrl = audioUrl,
-                adaptiveDashSource = adaptiveDashSource,
-                seekTo = currentPos,
-                playWhenReady = playWhenReady
-            )
+            if (applyToPlayer) {
+                playDashVideo(
+                    videoUrl = videoUrl,
+                    audioUrl = audioUrl,
+                    adaptiveDashSource = adaptiveDashSource,
+                    seekTo = currentPos,
+                    playWhenReady = playWhenReady
+                )
+            }
             return QualitySwitchResult(
                 videoUrl = videoUrl,
                 audioUrl = audioUrl,
@@ -996,7 +999,10 @@ class VideoPlaybackUseCase(
             com.android.purebilibili.core.util.MediaUtils.isDolbyAtmosAudioSupported(),
         isDolbyAudioSoftwareDecoded: Boolean =
             com.android.purebilibili.core.util.MediaUtils.isDolbySoftwareAudioDecoderRequired(),
-        playWhenReady: Boolean = true
+        playWhenReady: Boolean = true,
+        audioLang: String? = null,
+        requireExactQuality: Boolean = false,
+        applyToPlayer: Boolean = true
     ): QualitySwitchResult? {
         Logger.d("VideoPlaybackUseCase", " changeQualityFromApi: bvid=$bvid, cid=$cid, target=$qualityId")
         val effectivePlaybackQualityMode = if (
@@ -1007,7 +1013,13 @@ class VideoPlaybackUseCase(
             playbackQualityMode
         }
         
-        val playUrlData = VideoRepository.getPlayUrlData(bvid, cid, qualityId) ?: run {
+        val playUrlData = VideoRepository.getPlayUrlData(
+            bvid = bvid,
+            cid = cid,
+            qn = qualityId,
+            audioLang = audioLang,
+            requireExactQuality = requireExactQuality
+        ) ?: run {
             Logger.d("VideoPlaybackUseCase", " getPlayUrlData returned null")
             return null
         }
@@ -1035,17 +1047,20 @@ class VideoPlaybackUseCase(
             Logger.d("VideoPlaybackUseCase", " Video URL is empty")
             return null
         }
+        if (requireExactQuality && selection.actualQuality != qualityId) return null
         
-        if (selection.isDashPlayback) {
-            playDashVideo(
-                videoUrl = selection.videoUrl,
-                audioUrl = selection.audioUrl,
-                adaptiveDashSource = selection.adaptiveDashSource,
-                seekTo = currentPos,
-                playWhenReady = playWhenReady
-            )
-        } else {
-            playVideo(selection.videoUrl, currentPos, playWhenReady = playWhenReady)
+        if (applyToPlayer) {
+            if (selection.isDashPlayback) {
+                playDashVideo(
+                    videoUrl = selection.videoUrl,
+                    audioUrl = selection.audioUrl,
+                    adaptiveDashSource = selection.adaptiveDashSource,
+                    seekTo = currentPos,
+                    playWhenReady = playWhenReady
+                )
+            } else {
+                playVideo(selection.videoUrl, currentPos, playWhenReady = playWhenReady)
+            }
         }
         
         Logger.d("VideoPlaybackUseCase", " Quality switch result: target=$qualityId, actual=${selection.actualQuality}")

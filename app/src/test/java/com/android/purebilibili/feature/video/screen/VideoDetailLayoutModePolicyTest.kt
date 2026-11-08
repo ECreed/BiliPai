@@ -682,49 +682,33 @@ class VideoDetailLayoutModePolicyTest {
     }
 
     @Test
-    fun phoneAutoRotateApplyPolicy_appliesLandscapeCandidateImmediately() {
+    fun phoneAutoRotateDelay_usesShortDebounceForNormalRotations() {
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
-            resolvePhoneAutoRotateTargetToApply(
+            250L,
+            resolvePhoneAutoRotateDelayMs(
                 candidateOrientation = ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
                 lastLandscapeAppliedAtMs = null,
                 nowMs = 1_000L
             )
         )
-    }
-
-    @Test
-    fun phoneAutoRotateApplyPolicy_suppressesPortraitCandidateAfterRecentLandscape() {
         assertEquals(
-            null,
-            resolvePhoneAutoRotateTargetToApply(
+            250L,
+            resolvePhoneAutoRotateDelayMs(
                 candidateOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
                 lastLandscapeAppliedAtMs = 1_000L,
-                nowMs = 1_300L
+                nowMs = 2_000L
             )
         )
     }
 
     @Test
-    fun phoneAutoRotateApplyPolicy_allowsPortraitCandidateAfterLandscapeSettleWindow() {
+    fun phoneAutoRotateDelay_keepsQuickReturnToPortraitUntilLandscapeSettles() {
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
-            resolvePhoneAutoRotateTargetToApply(
+            400L,
+            resolvePhoneAutoRotateDelayMs(
                 candidateOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
                 lastLandscapeAppliedAtMs = 1_000L,
-                nowMs = 1_000L + PHONE_AUTO_ROTATE_LANDSCAPE_SETTLE_MS
-            )
-        )
-    }
-
-    @Test
-    fun phoneAutoRotateApplyPolicy_clearsUnknownCandidateImmediately() {
-        assertEquals(
-            null,
-            resolvePhoneAutoRotateTargetToApply(
-                candidateOrientation = null,
-                lastLandscapeAppliedAtMs = 1_000L,
-                nowMs = 1_300L
+                nowMs = 1_100L
             )
         )
     }

@@ -1305,7 +1305,7 @@ internal fun shouldReplacePlaybackSourceForQualityChange(
     reason: QualityChangeReason,
     cdnSelectionChangedUrl: Boolean
 ): Boolean {
-    return reason == QualityChangeReason.INITIAL_AUTO_UPGRADE || cdnSelectionChangedUrl
+    return reason != QualityChangeReason.USER_EXPLICIT || cdnSelectionChangedUrl
 }
 
 // ========== ViewModel ==========
@@ -1320,7 +1320,7 @@ class VideoPlaybackViewModel : ViewModel() {
 
     // HDR auto-upgrade state
     private val attemptedUpgradeKeys = mutableSetOf<String>()
-    private val explicitQualitySelectionKeys = mutableSetOf<String>()
+    private val explicitQualitySelections = mutableMapOf<String, Int>()
     private var explicitQualitySelectionGeneration: Long = 0L
     private var hdrAutoUpgradeJob: Job? = null
     private var qualitySwitchJob: Job? = null
@@ -3545,7 +3545,7 @@ class VideoPlaybackViewModel : ViewModel() {
                 currentPlayableDashVideoIds = playableDashVideoIds,
                 userHasExplicitQualitySelection = hasExplicitQualitySelectionForPlayback(
                     playbackKey = playbackKey,
-                    explicitSelectionKeys = explicitQualitySelectionKeys
+                    explicitSelectionKeys = explicitQualitySelections.keys
                 ),
                 upgradeAlreadyAttempted = attemptedUpgradeKeys.contains(playbackKey)
             )
@@ -6964,10 +6964,11 @@ class VideoPlaybackViewModel : ViewModel() {
         }
     }
     
-    fun applyFullscreenQualityPreference() {
-        val current = _uiState.value as? VideoPlaybackUiState.Success ?: return
+    internal suspend fun applyFullscreenQualityPreference(playbackKey: String) {
+        // 首播可能已经在请求 HDR；等它完成，避免横屏补选把正在返回的更高画质取消。
+        hdrAutoUpgradeJob?.join()
+        val current = uiState.awaitFullscreenQualityPlayback(playbackKey) ?: return
         val context = appContext ?: return
-        if (current.isQualitySwitching) return
         val isHdrSupported = com.android.purebilibili.core.util.MediaUtils.isHdrSupported(context)
         val isDolbySupported = com.android.purebilibili.core.util.MediaUtils.isDolbyVisionSupported(context)
         val storedQuality = NetworkUtils.getDefaultQualityId(context)
@@ -6981,12 +6982,7 @@ class VideoPlaybackViewModel : ViewModel() {
                 isDolbyVisionSupported = isDolbySupported
             )
         } else storedQuality
-        val explicitQuality = current.playbackQualityMode.lockedQualityId.takeIf {
-            hasExplicitQualitySelectionForPlayback(
-                buildPremiumAutoUpgradePlaybackKey(currentBvid, currentCid, current.currentAudioLang),
-                explicitQualitySelectionKeys
-            )
-        }
+        val explicitQuality = explicitQualitySelections[playbackKey]?.takeIf { it > 0 }
         val permittedQualities = current.qualityIds.filter { quality ->
             qualityManager.checkQualityPermission(
                 qualityId = quality,
@@ -6997,30 +6993,36 @@ class VideoPlaybackViewModel : ViewModel() {
                 serverAdvertisedQualities = current.qualityIds
             ) is QualityPermissionResult.Permitted
         }
-        val target = resolveFullscreenQualityUpgrade(
+        val upgrades = resolveFullscreenQualityUpgrades(
             currentQuality = current.currentQuality,
             preferredQuality = preferredQuality,
             availableQualities = permittedQualities,
             explicitlySelectedQuality = explicitQuality,
             dataSaverActive = com.android.purebilibili.core.store.SettingsManager.isDataSaverActive(context)
-        ) ?: return
-        Logger.d("PlayerVM", "PLAY_DIAG fullscreen_quality current=${current.currentQuality} target=$target")
-        changeQualityInternal(target, QualityChangeReason.FULLSCREEN_PREFERENCE)
+        )
+        val target = upgrades.firstOrNull() ?: return
+        Logger.d("PlayerVM", "PLAY_DIAG fullscreen_quality current=${current.currentQuality} candidates=$upgrades")
+        changeQualityInternal(target, QualityChangeReason.FULLSCREEN_PREFERENCE, upgrades.drop(1))
     }
 
-    fun changeQuality(qualityId: Int) = changeQualityInternal(qualityId, QualityChangeReason.USER_EXPLICIT)
-
-    private fun changeQualityInternal(qualityId: Int, reason: QualityChangeReason) {
+    fun changeQuality(qualityId: Int) {
         val current = _uiState.value as? VideoPlaybackUiState.Success ?: return
-        if (current.isQualitySwitching) {
-            toast("正在切换中...", PlayerToastPresentation.CenteredHighlight)
-            return
+        if (!current.isQualitySwitching) {
+            explicitQualitySelections[current.qualityPlaybackKey()] = qualityId
         }
-        // Cancel only the current playback's pending auto-upgrade. Other videos remain eligible.
-        if (reason == QualityChangeReason.USER_EXPLICIT) {
-            explicitQualitySelectionKeys += buildPremiumAutoUpgradePlaybackKey(
-                currentBvid, currentCid, current.currentAudioLang
-            )
+        changeQualityInternal(qualityId, QualityChangeReason.USER_EXPLICIT)
+    }
+
+    private fun changeQualityInternal(
+        qualityId: Int,
+        reason: QualityChangeReason,
+        fullscreenFallbackQualities: List<Int> = emptyList()
+    ) {
+        val current = _uiState.value as? VideoPlaybackUiState.Success ?: return
+        val isFullscreenUpgrade = reason == QualityChangeReason.FULLSCREEN_PREFERENCE
+        if (current.isQualitySwitching) {
+            if (!isFullscreenUpgrade) toast("正在切换中...", PlayerToastPresentation.CenteredHighlight)
+            return
         }
         explicitQualitySelectionGeneration++
         hdrAutoUpgradeJob?.cancel()
@@ -7109,7 +7111,7 @@ class VideoPlaybackViewModel : ViewModel() {
         val hasCachedDashTracks = current.cachedDashVideos.isNotEmpty()
         val cacheContainsRequestedQuality = current.cachedDashVideos.any { it.id == qualityId }
         val appApiCooldownRemainingMs = VideoRepository.getAppApiCooldownRemainingMs()
-        if (
+        if (!isFullscreenUpgrade &&
             shouldBlockPremiumQualitySwitchDuringCooldown(
                 requestedQualityId = qualityId,
                 cacheContainsRequestedQuality = cacheContainsRequestedQuality,
@@ -7131,10 +7133,25 @@ class VideoPlaybackViewModel : ViewModel() {
         _uiState.value = current.copy(
             isQualitySwitching = true,
             requestedQuality = qualityId,
-            playbackQualityMode = playbackQualityMode,
-            pendingPlaybackTransitionPositionMs = transitionPositionMs
+            playbackQualityMode = if (isFullscreenUpgrade) current.playbackQualityMode else playbackQualityMode,
+            pendingPlaybackTransitionPositionMs =
+                if (isFullscreenUpgrade) current.pendingPlaybackTransitionPositionMs else transitionPositionMs
         )
-        
+
+        fun finishFailedQualityChange() {
+            _uiState.update { state ->
+                val latest = state as? VideoPlaybackUiState.Success ?: return@update state
+                if (latest.qualityPlaybackKey() != current.qualityPlaybackKey()) return@update state
+                latest.copy(
+                    isQualitySwitching = false,
+                    requestedQuality = null,
+                    playbackQualityMode = current.playbackQualityMode,
+                    pendingPlaybackTransitionPositionMs =
+                        if (isFullscreenUpgrade) latest.pendingPlaybackTransitionPositionMs else null
+                )
+            }
+        }
+
         qualitySwitchJob = viewModelScope.launch {
             try {
                 val audioPref = current.requestedAudioQuality
@@ -7151,33 +7168,50 @@ class VideoPlaybackViewModel : ViewModel() {
                     sessionBlockedCodecs = sessionBlockedCodecs
                 )
 
-                val result = playbackUseCase.changeQualityFromCache(
-                    qualityId = qualityId,
-                    cachedVideos = current.cachedDashVideos,
-                    cachedAudios = current.cachedDashAudios,
-                    cachedDash = current.cachedDash,
-                    currentPos = currentPos,
-                    durationMs = current.videoDurationMs,
-                    playbackQualityMode = playbackQualityMode,
-                    audioQualityPreference = audioPref,
-                    videoCodecPreference = videoCodecPreference,
-                    videoSecondCodecPreference = videoSecondCodecPreference,
-                    isHevcSupported = isHevcSupported,
-                    isAv1Supported = isAv1Supported,
-                    playWhenReady = playWhenReadyAfterSwitch
-                ) ?: playbackUseCase.changeQualityFromApi(
-                    bvid = currentBvid,
-                    cid = currentCid,
-                    qualityId = qualityId,
-                    currentPos = currentPos,
-                    playbackQualityMode = playbackQualityMode,
-                    audioQualityPreference = audioPref,
-                    videoCodecPreference = videoCodecPreference,
-                    videoSecondCodecPreference = videoSecondCodecPreference,
-                    isHevcSupported = isHevcSupported,
-                    isAv1Supported = isAv1Supported,
-                    playWhenReady = playWhenReadyAfterSwitch
-                )
+                var result: QualitySwitchResult? = null
+                for (candidate in listOf(qualityId) + fullscreenFallbackQualities) {
+                    val candidateMode = resolvePlaybackQualityModeForQualitySelection(candidate)
+                    result = playbackUseCase.changeQualityFromCache(
+                        qualityId = candidate,
+                        cachedVideos = current.cachedDashVideos,
+                        cachedAudios = current.cachedDashAudios,
+                        cachedDash = current.cachedDash,
+                        currentPos = currentPos,
+                        durationMs = current.videoDurationMs,
+                        playbackQualityMode = candidateMode,
+                        audioQualityPreference = audioPref,
+                        videoCodecPreference = videoCodecPreference,
+                        videoSecondCodecPreference = videoSecondCodecPreference,
+                        isHevcSupported = isHevcSupported,
+                        isAv1Supported = isAv1Supported,
+                        playWhenReady = playWhenReadyAfterSwitch,
+                        applyToPlayer = !isFullscreenUpgrade
+                    )
+                    if (result != null) break
+                    if (isFullscreenUpgrade && shouldBlockPremiumQualitySwitchDuringCooldown(
+                            requestedQualityId = candidate,
+                            cacheContainsRequestedQuality = false,
+                            appApiCooldownRemainingMs = VideoRepository.getAppApiCooldownRemainingMs()
+                        )
+                    ) continue
+                    result = playbackUseCase.changeQualityFromApi(
+                        bvid = current.info.bvid.ifBlank { currentBvid },
+                        cid = current.info.cid,
+                        qualityId = candidate,
+                        currentPos = currentPos,
+                        playbackQualityMode = candidateMode,
+                        audioQualityPreference = audioPref,
+                        videoCodecPreference = videoCodecPreference,
+                        videoSecondCodecPreference = videoSecondCodecPreference,
+                        isHevcSupported = isHevcSupported,
+                        isAv1Supported = isAv1Supported,
+                        playWhenReady = playWhenReadyAfterSwitch,
+                        audioLang = current.currentAudioLang,
+                        requireExactQuality = isFullscreenUpgrade,
+                        applyToPlayer = !isFullscreenUpgrade
+                    )
+                    if (result != null) break
+                }
                 
                 if (result != null) {
                     val nextCachedDashVideos = result.cachedDashVideos.ifEmpty { current.cachedDashVideos }
@@ -7208,36 +7242,38 @@ class VideoPlaybackViewModel : ViewModel() {
                             qualityLabels = result.qualityLabels,
                             switchableQualityIds = result.switchableQualityIds,
                             wasFallback = result.wasFallback,
-                            currentPos = currentPos,
-                            playWhenReady = playWhenReadyAfterSwitch,
-                            playbackQualityMode = playbackQualityMode
+                            currentPos = if (isFullscreenUpgrade) {
+                                playbackUseCase.getCurrentPosition().coerceAtLeast(0L)
+                            } else currentPos,
+                            playWhenReady = if (isFullscreenUpgrade) {
+                                exoPlayer?.playWhenReady ?: playWhenReadyAfterSwitch
+                            } else playWhenReadyAfterSwitch,
+                            playbackQualityMode = if (isFullscreenUpgrade) {
+                                resolvePlaybackQualityModeForQualitySelection(result.actualQuality)
+                            } else playbackQualityMode
                         ),
                         reason = reason,
                         cdnSelection = cdnSelection
                     )
                 } else {
-                    _uiState.value = current.copy(
-                        isQualitySwitching = false,
-                        requestedQuality = null,
-                        pendingPlaybackTransitionPositionMs = null
-                    )
-                    showQualitySwitchFailureDialog(
-                        requestedQualityId = qualityId,
-                        hasCachedDashTracks = hasCachedDashTracks,
-                        cacheContainsRequestedQuality = cacheContainsRequestedQuality
-                    )
+                    finishFailedQualityChange()
+                    if (!isFullscreenUpgrade) {
+                        showQualitySwitchFailureDialog(
+                            requestedQualityId = qualityId,
+                            hasCachedDashTracks = hasCachedDashTracks,
+                            cacheContainsRequestedQuality = cacheContainsRequestedQuality
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                _uiState.value = current.copy(
-                    isQualitySwitching = false,
-                    requestedQuality = null,
-                    pendingPlaybackTransitionPositionMs = null
-                )
-                showQualitySwitchFailureDialog(
-                    requestedQualityId = qualityId,
-                    loadError = VideoLoadError.fromException(e)
-                )
+                finishFailedQualityChange()
+                if (!isFullscreenUpgrade) {
+                    showQualitySwitchFailureDialog(
+                        requestedQualityId = qualityId,
+                        loadError = VideoLoadError.fromException(e)
+                    )
+                }
             }
         }
     }

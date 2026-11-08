@@ -13,14 +13,16 @@ internal enum class PlayUrlSource {
 
 internal enum class PlayUrlRequestKind {
     INITIAL,
-    EXPLICIT
+    EXPLICIT,
+    EXACT_UPGRADE
 }
 
-internal fun isStrictPremiumQualityRequest(
+internal fun shouldRequestOnlyTargetQuality(
     requestKind: PlayUrlRequestKind,
     targetQn: Int
 ): Boolean {
-    return requestKind == PlayUrlRequestKind.EXPLICIT && targetQn in 125..127
+    return requestKind == PlayUrlRequestKind.EXACT_UPGRADE ||
+        (requestKind == PlayUrlRequestKind.EXPLICIT && targetQn in 125..127)
 }
 
 internal data class VideoInfoLookupInput(
@@ -299,7 +301,11 @@ internal fun shouldAcceptAppApiResultForTargetQuality(
         return returnedQuality > 0 || dashVideoIds.isNotEmpty()
     }
 
-    if (isStrictPremiumQualityRequest(requestKind, targetQn)) {
+    if (requestKind == PlayUrlRequestKind.EXACT_UPGRADE) {
+        return targetQn in dashVideoIds || (dashVideoIds.isEmpty() && returnedQuality == targetQn)
+    }
+
+    if (shouldRequestOnlyTargetQuality(requestKind, targetQn)) {
         return targetQn in dashVideoIds
     }
 
